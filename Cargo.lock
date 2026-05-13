@@ -3,5 +3,17 @@
 version = 4
 
 [[package]]
-name = "Network_Architecture_MMO"
+name = "dedicated_server"
+version = "0.1.0"
+
+[[package]]
+name = "gatekeeper"
+version = "0.1.0"
+
+[[package]]
+name = "orchestrator"
+version = "0.1.0"
+
+[[package]]
+name = "shared"
 version = "0.1.0"

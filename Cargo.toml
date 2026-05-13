@@ -1,6 +1,13 @@
-[package]
-name = "Network_Architecture_MMO"
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace]
+resolver = "2"
+
+members = [
+    "dedicated_server",
+    "orchestrator",
+    "gatekeeper",
+    "shared"
+]
