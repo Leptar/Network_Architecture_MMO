@@ -1,10 +1,10 @@
+use rocket::{launch, routes};
+
 mod handlers;
 mod redis_pool;
 
-fn main() {
-    println!("Hello, world!");
-}
-
-fn health(){
-    //TODO
+#[launch]
+fn rocket() -> _ {
+    rocket::build()
+        .mount("/", routes![handlers::health])
 }
