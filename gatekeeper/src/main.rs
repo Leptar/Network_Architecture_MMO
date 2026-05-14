@@ -6,5 +6,8 @@ mod redis_pool;
 #[launch]
 fn rocket() -> _ {
     rocket::build()
-        .mount("/", routes![handlers::health])
+        .mount("/", routes![
+            handlers::health,
+            handlers::login
+        ])
 }
