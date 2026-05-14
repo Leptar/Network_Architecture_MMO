@@ -4,3 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+rocket.workspace = true
+tokio.workspace = true
+serde.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+shared.workspace = true
