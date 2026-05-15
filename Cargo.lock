@@ -926,6 +926,9 @@ name = "orchestrator"
 version = "0.1.0"
 dependencies = [
  "redis",
+ "serde",
+ "serde_json",
+ "shared",
  "tokio",
 ]
 
@@ -1360,6 +1363,10 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "shlex"
