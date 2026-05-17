@@ -2,6 +2,10 @@
 use rocket::serde::json::Json;
 use rocket::http::Status;
 use serde::{Serialize, Deserialize};
+use rocket::State;
+use deadpool_redis::Pool;
+use uuid::Uuid;
+use crate::redis_pool;
 
 // HEALTH ENDPOINT PART
 #[derive(Serialize)]
@@ -42,24 +46,38 @@ pub struct ErrorResponse {
 }
 
 #[post("/login", data = "<login_data>")]
-pub fn login(login_data: Json<LoginRequest<'_>>) -> Result<Json<LoginResponse>, (Status, Json<ErrorResponse>)> {
+pub async fn login(
+    login_data: Json<LoginRequest<'_>>,
+    pool: &State<Pool>
+) -> Result<Json<LoginResponse>, (Status, Json<ErrorResponse>)> {
+
     let user = login_data.username;
     let pass = login_data.password;
 
-    // Stub : je verifie pas reelement quoi que se soit just le user doit pas etre vide et le pass
-    // c'est 1234.
-    if !user.is_empty() && pass == "1234" {
-        Ok(Json(LoginResponse {
-            player_id: "un-id-unique-temporaire".to_string(),
-            server: ServerInfo {
-                ip: "127.0.0.1".to_string(),
-                port: 7001,
-                zone: "zone_A".to_string(),
-            },
-        }))
-    } else {
-        Err((Status::Unauthorized, Json(ErrorResponse {
+    // j'ai inverser la condition
+    if user.is_empty() || pass != "1234" {
+        return Err((Status::Unauthorized, Json(ErrorResponse {
             error: "Nom d'utilisateur ou mot de passe incorrect".to_string()
-        })))
+        })));
+    }
+
+    let result = redis_pool::find_available_server(pool).await;
+
+    match result {
+        Some(server_info) => {
+            // Serveur trouvé 
+            let player_id = Uuid::new_v4().to_string();
+
+            Ok(Json(LoginResponse {
+                player_id,
+                server: server_info,
+            }))
+        }
+        None => {
+            // renvoie l'erreur 503
+            Err((Status::ServiceUnavailable, Json(ErrorResponse {
+                error: "No server available".to_string(),
+            })))
+        }
     }
 }
