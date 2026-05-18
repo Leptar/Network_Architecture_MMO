@@ -45,8 +45,14 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+fn get_zone_from_ip(ip: std::net::IpAddr) -> String {
+    // stub : juste 
+     "EU".to_string()
+}
+
 #[post("/login", data = "<login_data>")]
 pub async fn login(
+    client_ip: std::net::IpAddr,
     login_data: Json<LoginRequest<'_>>,
     pool: &State<Pool>
 ) -> Result<Json<LoginResponse>, (Status, Json<ErrorResponse>)> {
@@ -61,7 +67,8 @@ pub async fn login(
         })));
     }
 
-    let result = redis_pool::find_available_server(pool).await;
+    let result =
+        redis_pool::find_available_server(get_zone_from_ip(client_ip),pool).await;
 
     match result {
         Some(server_info) => {
