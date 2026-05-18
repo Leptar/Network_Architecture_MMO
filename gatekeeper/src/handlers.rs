@@ -50,7 +50,7 @@ fn map_continent_to_zone(continent_code: &str) -> String {
     match continent_code {
         "EU" => "EU".to_string(),
         "NA" => "NA".to_string(),
-        "SA" => "NA".to_string(),
+        "SA" => "SA".to_string(),
         "AS" | "OC" => "ASIA".to_string(),
         _ => "EU".to_string(), // Zone par défaut si on ne sait pas
     }
