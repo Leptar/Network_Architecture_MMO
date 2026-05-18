@@ -6,6 +6,7 @@ use rocket::State;
 use deadpool_redis::Pool;
 use uuid::Uuid;
 use crate::redis_pool;
+use maxminddb::{Reader, path};
 
 // HEALTH ENDPOINT PART
 #[derive(Serialize)]
@@ -45,16 +46,22 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-fn get_zone_from_ip(ip: std::net::IpAddr) -> String {
-    // stub : juste 
-     "EU".to_string()
+fn map_continent_to_zone(continent_code: &str) -> String {
+    match continent_code {
+        "EU" => "EU".to_string(),
+        "NA" => "NA".to_string(),
+        "SA" => "NA".to_string(),
+        "AS" | "OC" => "ASIA".to_string(),
+        _ => "EU".to_string(), // Zone par défaut si on ne sait pas
+    }
 }
 
 #[post("/login", data = "<login_data>")]
 pub async fn login(
     client_ip: std::net::IpAddr,
     login_data: Json<LoginRequest<'_>>,
-    pool: &State<Pool>
+    pool: &State<Pool>,
+    geo_db: &State<Reader<Vec<u8>>>
 ) -> Result<Json<LoginResponse>, (Status, Json<ErrorResponse>)> {
 
     let user = login_data.username;
@@ -67,8 +74,19 @@ pub async fn login(
         })));
     }
 
-    let result =
-        redis_pool::find_available_server(get_zone_from_ip(client_ip),pool).await;
+    // default
+    let mut player_zone = "EU".to_string();
+
+    // check db geo pour deduire la zone
+    // Note : 127.0.0.1 = erreur donc par défaut = "EU"
+    if let Ok(lookup_result) = geo_db.lookup(client_ip) {
+        if let Ok(Some(continent_code)) = lookup_result.decode_path::<String>(&path!["continent", "code"]) {
+            // trad
+            player_zone = map_continent_to_zone(&continent_code);
+        }
+    }
+
+    let result = redis_pool::find_available_server(player_zone, pool).await;
 
     match result {
         Some(server_info) => {
