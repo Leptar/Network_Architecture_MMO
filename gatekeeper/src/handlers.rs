@@ -2,6 +2,11 @@
 use rocket::serde::json::Json;
 use rocket::http::Status;
 use serde::{Serialize, Deserialize};
+use rocket::State;
+use deadpool_redis::Pool;
+use uuid::Uuid;
+use crate::redis_pool;
+use maxminddb::{Reader, path};
 
 // HEALTH ENDPOINT PART
 #[derive(Serialize)]
@@ -41,25 +46,63 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+fn map_continent_to_zone(continent_code: &str) -> String {
+    match continent_code {
+        "EU" => "EU".to_string(),
+        "NA" => "NA".to_string(),
+        "SA" => "NA".to_string(),
+        "AS" | "OC" => "ASIA".to_string(),
+        _ => "EU".to_string(), // Zone par défaut si on ne sait pas
+    }
+}
+
 #[post("/login", data = "<login_data>")]
-pub fn login(login_data: Json<LoginRequest<'_>>) -> Result<Json<LoginResponse>, (Status, Json<ErrorResponse>)> {
+pub async fn login(
+    client_ip: std::net::IpAddr,
+    login_data: Json<LoginRequest<'_>>,
+    pool: &State<Pool>,
+    geo_db: &State<Reader<Vec<u8>>>
+) -> Result<Json<LoginResponse>, (Status, Json<ErrorResponse>)> {
+
     let user = login_data.username;
     let pass = login_data.password;
 
-    // Stub : je verifie pas reelement quoi que se soit just le user doit pas etre vide et le pass
-    // c'est 1234.
-    if !user.is_empty() && pass == "1234" {
-        Ok(Json(LoginResponse {
-            player_id: "un-id-unique-temporaire".to_string(),
-            server: ServerInfo {
-                ip: "127.0.0.1".to_string(),
-                port: 7001,
-                zone: "zone_A".to_string(),
-            },
-        }))
-    } else {
-        Err((Status::Unauthorized, Json(ErrorResponse {
+    // j'ai inverser la condition
+    if user.is_empty() || pass != "1234" {
+        return Err((Status::Unauthorized, Json(ErrorResponse {
             error: "Nom d'utilisateur ou mot de passe incorrect".to_string()
-        })))
+        })));
+    }
+
+    // default
+    let mut player_zone = "EU".to_string();
+
+    // check db geo pour deduire la zone
+    // Note : 127.0.0.1 = erreur donc par défaut = "EU"
+    if let Ok(lookup_result) = geo_db.lookup(client_ip) {
+        if let Ok(Some(continent_code)) = lookup_result.decode_path::<String>(&path!["continent", "code"]) {
+            // trad
+            player_zone = map_continent_to_zone(&continent_code);
+        }
+    }
+
+    let result = redis_pool::find_available_server(player_zone, pool).await;
+
+    match result {
+        Some(server_info) => {
+            // Serveur trouvé 
+            let player_id = Uuid::new_v4().to_string();
+
+            Ok(Json(LoginResponse {
+                player_id,
+                server: server_info,
+            }))
+        }
+        None => {
+            // renvoie l'erreur 503
+            Err((Status::ServiceUnavailable, Json(ErrorResponse {
+                error: "No server available".to_string(),
+            })))
+        }
     }
 }
