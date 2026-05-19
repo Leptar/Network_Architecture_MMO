@@ -936,6 +936,7 @@ name = "dedicated_server"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bytes",
  "game_sockets",
  "serde",
  "serde_json",

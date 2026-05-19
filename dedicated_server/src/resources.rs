@@ -1,7 +1,7 @@
 ﻿use bevy::prelude::*;
-use std::net::SocketAddr;
 use std::collections::HashMap;
-use game_sockets::{GamePeer, protocols::UdpBackend};
+use game_sockets::{GamePeer};
+use game_sockets::GameConnection;
 
 #[derive(Resource)]
 pub struct ServerConfig {
@@ -14,13 +14,13 @@ pub struct ServerConfig {
 
 #[derive(Resource, Default)]
 pub struct PlayerRegistry {
-    pub players: HashMap<SocketAddr, String>,
+    pub players: HashMap<GameConnection, String>,
 }
 
-// #[derive(Resource)]
-// pub struct GameSocket {
-//     pub peer: GamePeer,
-// }
+#[derive(Resource)]
+pub struct GameSocket {
+    pub peer: GamePeer,
+}
 
 impl ServerConfig {
     pub fn from_env() -> Self {
@@ -53,4 +53,17 @@ impl ServerConfig {
             orchestrator_addr,
         }
     }
+}
+
+#[derive(Resource)]
+pub struct HeartbeatTimer(pub Timer);
+impl Default for HeartbeatTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(5.0, TimerMode::Repeating))
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct OrchestratorConnection {
+    pub connection: Option<game_sockets::GameConnection>,
 }
