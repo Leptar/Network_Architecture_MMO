@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+maxminddb = "0.28.1"
+rand = "0.10.1"
 deadpool-redis.workspace = true
 rocket.workspace = true
 tokio.workspace = true
