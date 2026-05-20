@@ -38,10 +38,11 @@ fn stop_servers()
 
 }
 
-
-async fn heartbeat_listener (){
+async fn heartbeat_listener (client : redis::Client){
     //format : HEARTBEAT { id, ip, port, zone, player_count }
     let socket = UdpSocket::bind(("0.0.0.0", ORCH_PORT as u16)).await.expect("Failed to start heartbeat listener");
+
+    let mut con = client.get_connection().expect("Failed to connect to Redis");
 
     loop {
         let mut buf = [0; 1024];
@@ -51,6 +52,20 @@ async fn heartbeat_listener (){
 
         if let Ok(heartbeat) = serde_json::from_str::<Heartbeat>(&msg) {
             println!("Parsed heartbeat: {:?}", heartbeat);
+
+            let _ : () = redis::cmd("HSET")
+                .arg(format!("server:{}", heartbeat.id))
+                .arg("port").arg(heartbeat.port)
+                .arg("ip").arg(&heartbeat.ip)
+                .arg("zone").arg(&heartbeat.zone)
+                .arg("player_count").arg(heartbeat.player_count)
+                .arg("max_players").arg(heartbeat.max_players)
+                .query(&mut con).expect("Failed to update Redis");
+
+            let _ : () = redis::cmd("EXPIRE")
+                .arg(format!("server:{}", heartbeat.id))
+                .arg(15)
+                .query(&mut con).expect("Failed to set TTL");
         } else {
             println!("Failed to parse heartbeat, ignoring...");
         }
@@ -59,9 +74,11 @@ async fn heartbeat_listener (){
 
 #[tokio::main]
 async fn main() {
+    let client = redis::Client::open("redis://127.0.0.1:6379").expect("Failed to create Redis client");
+
     tokio::spawn(async move {start_servers().await;});
 
-    tokio::spawn(async move {heartbeat_listener().await;});
+    tokio::spawn(async move {heartbeat_listener(client).await;});
 
     tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
     println!("Shutting down orchestrator...");
