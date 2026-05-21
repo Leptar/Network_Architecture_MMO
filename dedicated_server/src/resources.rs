@@ -39,7 +39,7 @@ impl ServerConfig {
             .expect("MAX_PLAYERS doit être un nombre valide");
 
         let orchestrator_addr = std::env::var("ORCH_ADDR")
-            .unwrap_or("127.0.0.1:22555".to_string()); // port de l'orchestrateur
+            .unwrap_or("host.docker.internal:22555".to_string());
 
         // uuid::Uuid::new_v4() génère un identifiant unique aléatoire
         // ex: "550e8400-e29b-41d4-a716-446655440000"

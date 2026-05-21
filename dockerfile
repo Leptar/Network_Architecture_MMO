@@ -18,9 +18,12 @@ RUN apt-get update && apt-get install -y clang libclang-dev cmake protobuf-compi
 RUN cargo build --release -p dedicated_server
 
 # Stage 2 - Image finale
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 WORKDIR /app
+
+# Installer les dépendances nécessaires pour exécuter le binaire
+RUN apt-get update && apt-get install -y libprotobuf-dev && rm -rf /var/lib/apt/lists/*
 
 # Copier seulement le binaire compilé
 COPY --from=builder /app/target/release/dedicated_server .

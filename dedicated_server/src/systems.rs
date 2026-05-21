@@ -51,7 +51,13 @@ pub fn receive_packets(
             }
             GameNetworkEvent::Connected(conn) => {
                 println!("Connecté à : {:?}", conn);
-                orch_conn.connection = Some(conn);
+                // On stocke seulement si on n'a pas encore l'orchestrateur
+                if orch_conn.connection.is_none() {
+                    orch_conn.connection = Some(conn);
+                    println!("Orchestrateur enregistré !");
+                } else {
+                    println!("Nouveau joueur connecté : {:?}", conn);
+                }
             }
             _ => {}
         }
@@ -84,12 +90,9 @@ pub fn send_heartbeat(
     };
 
     let json = serde_json::to_string(&heartbeat).unwrap();
-    println!("Envoi heartbeat : {}", json);
+    //println!("Envoi heartbeat : {}", json);
 
-    if let Some(conn) = &orch_conn.connection {
-        let stream = game_sockets::GameStream::from(0u16);
-        let bytes = bytes::Bytes::from(json.into_bytes());
-        let _ = socket.peer.send(conn, &stream, bytes);
-        println!("Heartbeat envoyé à l'orchestrateur !");
-    }
+    let udp_socket = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+    udp_socket.send_to(json.as_bytes(), &config.orchestrator_addr).unwrap();
+    //println!("Heartbeat envoyé !");
 }
