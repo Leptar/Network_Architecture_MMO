@@ -51,7 +51,13 @@ pub fn receive_packets(
             }
             GameNetworkEvent::Connected(conn) => {
                 println!("Connecté à : {:?}", conn);
-                orch_conn.connection = Some(conn);
+                // On stocke seulement si on n'a pas encore l'orchestrateur
+                if orch_conn.connection.is_none() {
+                    orch_conn.connection = Some(conn);
+                    println!("Orchestrateur enregistré !");
+                } else {
+                    println!("Nouveau joueur connecté : {:?}", conn);
+                }
             }
             _ => {}
         }
