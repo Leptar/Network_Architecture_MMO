@@ -1,5 +1,5 @@
 ﻿# Stage 1 - Compilation
-FROM rust:1.87 AS builder
+FROM rust:1.95 AS builder
 
 WORKDIR /app
 
@@ -10,6 +10,9 @@ COPY shared/ ./shared/
 COPY orchestrator/ ./orchestrator/
 COPY gatekeeper/ ./gatekeeper/
 
+# Installer les dépendances nécessaires pour la compilation
+RUN apt-get update && apt-get install -y clang libclang-dev cmake protobuf-compiler \
+    && rustup component add rustfmt
 
 # Compiler uniquement le dedicated_server
 RUN cargo build --release -p dedicated_server
