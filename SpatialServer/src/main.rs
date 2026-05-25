@@ -1,4 +1,5 @@
 mod components;
+mod quadtree;
 
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use std::time::Duration;
