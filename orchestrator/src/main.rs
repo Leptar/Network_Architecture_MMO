@@ -28,7 +28,7 @@ async fn start_servers() {
             "-e",
             &orch_addr,
             "--add-host=host.docker.internal:host-gateway",
-            "dgs-image",
+            "mmo-dedicated-server",
         ])
         .spawn()
         .expect("Failed to start game server");
