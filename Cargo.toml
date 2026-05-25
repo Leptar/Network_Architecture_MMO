@@ -5,8 +5,8 @@ members = [
     "dedicated_server",
     "orchestrator",
     "gatekeeper",
-    "shared"
-]
+    "shared",
+    "SpatialServer"]
 
 [workspace.package]
 version = "0.1.0"
