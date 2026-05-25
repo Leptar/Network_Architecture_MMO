@@ -1,3 +1,5 @@
+mod components;
+
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use std::time::Duration;
 // use shared::*;
