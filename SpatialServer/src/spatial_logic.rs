@@ -2,7 +2,7 @@
 use crate::components::{CurrentShard, Position};
 use crate::quadtree::QuadTree;
 
-fn check_shard_transitions(
+pub(crate) fn check_shard_transitions(
     mut query: Query<(&Position, &mut CurrentShard), Changed<Position>>,
     quad_tree: Res<QuadTree>)
 {
