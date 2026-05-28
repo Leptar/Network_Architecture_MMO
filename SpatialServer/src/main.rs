@@ -1,5 +1,6 @@
 mod components;
 mod quadtree;
+mod spatial_logic;
 
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use std::time::Duration;
