@@ -60,3 +60,48 @@ impl QuadTree {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper pour créer un arbre de test très simple (100x100 divisé en 4)
+    fn create_test_tree() -> QuadTree {
+        QuadTree {
+            bounds: Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0)),
+            depth: 0,
+            max_depth: 1,
+            shard_id: None,
+            children: Some(Box::new([
+                // Enfant 0 : Top-Left (Shard 1)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(0.0, 50.0), Vec2::new(50.0, 100.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(1) },
+                // Enfant 1 : Top-Right (Shard 2)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(50.0, 50.0), Vec2::new(100.0, 100.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(2) },
+                // Enfant 2 : Bottom-Left (Shard 3)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(3) },
+                // Enfant 3 : Bottom-Right (Shard 4)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(50.0, 0.0), Vec2::new(100.0, 50.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(4) },
+            ])),
+        }
+    }
+
+    #[test]
+    fn test_shard_for_resolves_correctly() {
+        let tree = create_test_tree();
+        // Vérification stricte : le point (25, 75) doit être dans le Shard 1
+        assert_eq!(tree.shard_for(Vec2::new(25.0, 75.0)), Some(1));
+        // Le point (75, 25) doit être dans le Shard 4
+        assert_eq!(tree.shard_for(Vec2::new(75.0, 25.0)), Some(4));
+    }
+
+    #[test]
+    fn test_shards_near_detects_boundaries() {
+        let tree = create_test_tree();
+        // Un joueur en (48, 50) avec une marge de 5.0 chevauche la ligne verticale du milieu (x=50)
+        let near = tree.shards_near(Vec2::new(48.0, 75.0), 5.0);
+        // Il devrait détecter les shards 1 et 2
+        assert!(near.contains(&1));
+        assert!(near.contains(&2));
+        assert_eq!(near.len(), 2);
+    }
+}
