@@ -1,11 +1,14 @@
 ﻿use bevy::prelude::*;
-use crate::entities::PlayerRegistry;
+use game_sockets::{GameConnection, GamePeer, GameStream};
+use shared::ServerSatus;
+use crate::entities::*;
+use crate::resources::*;
 
-pub trait ShardMessage {
-    fn resolve(&mut self, registry: &mut PlayerRegistry);
+pub trait  InterShardMessage {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream);
 }
 
-//------------------------------------------------------------------------//
+//---------------------------------- HandoffRequest ----------------------------------//
 
 pub struct HandoffRequest{
     entity_id: u32,
@@ -14,9 +17,46 @@ pub struct HandoffRequest{
     state: [u8; 64],
 }
 
-impl ShardMessage for HandoffRequest {
-    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+impl InterShardMessage for HandoffRequest {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream) {
         println!("Resolving Handoff Request for {}", self.entity_id);
+
+        if server_config.status == ServerSatus::Available {
+            let new_ghost_player = PlayerEntity{
+                id: self.entity_id,
+                authority: EntityAuthority::Ghost { source_shard : OtherShardConnectionInfo {
+                    connection,
+                    stream,
+                }},
+                position: self.pos,
+                rotation: 0.0,
+                velocity: self.vel,
+            };
+
+            registry.players.insert(self.entity_id, new_ghost_player);
+
+            server_config.verify_status(registry.players.len());
+
+            //send Handoff accepte
+            let accept_msg = HandoffAccept {
+                entity_id: self.entity_id,
+            };
+
+            if let Some(player) = registry.players.get(&self.entity_id) {
+                if let EntityAuthority::Ghost { source_shard } = &player.authority {
+                    send_inter_shards_packet(&socket.peer, Box::new(accept_msg), &source_shard.connection, &source_shard.stream);
+                }
+            }
+
+        } else {
+            //send Handoff reject
+            let reject_msg = HandoffReject {
+                entity_id: self.entity_id,
+                reason: "Server is full".to_string(),
+            };
+
+            send_inter_shards_packet(&socket.peer, Box::new(reject_msg), &connection, &stream);
+        }
     }
 }
 
@@ -47,14 +87,14 @@ impl HandoffRequest {
     }
 }
 
-//------------------------------------------------------------------------//
+//---------------------------------- HandoffAccept ----------------------------------//
 
 pub struct HandoffAccept{
     entity_id: u32,
 }
 
-impl ShardMessage for HandoffAccept {
-    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+impl InterShardMessage for HandoffAccept {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         println!("Resolving Handoff Accept for {}", self.entity_id);
     }
 }
@@ -73,15 +113,16 @@ impl HandoffAccept {
         }
     }
 }
-//------------------------------------------------------------------------//
+
+//---------------------------------- HandoffReject ----------------------------------//
 
 pub struct HandoffReject{
     entity_id: u32,
     reason: String,
 }
 
-impl ShardMessage for HandoffReject {
-    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+impl InterShardMessage for HandoffReject {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         println!("Resolving Handoff Reject for {} : {}", self.entity_id, self.reason);
     }
 }
@@ -103,14 +144,14 @@ impl HandoffReject {
     }
 }
 
-//------------------------------------------------------------------------//
+//---------------------------------- HandoffComplete ----------------------------------//
 
 pub struct HandoffComplete{
     entity_id: u32,
 }
 
-impl ShardMessage for HandoffComplete {
-    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+impl InterShardMessage for HandoffComplete {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         println!("Resolving Handoff Complete for {}", self.entity_id);
     }
 }
@@ -130,7 +171,7 @@ impl HandoffComplete {
     }
 }
 
-//------------------------------------------------------------------------//
+//---------------------------------- GhostUpdate ----------------------------------//
 
 pub struct GhostUpdate{
     entity_id: u32,
@@ -138,8 +179,8 @@ pub struct GhostUpdate{
     vel: Vec2,
 }
 
-impl ShardMessage for GhostUpdate {
-    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+impl InterShardMessage for GhostUpdate {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         println!("Resolving Ghost Update for {}", self.entity_id);
     }
 }
@@ -169,4 +210,29 @@ impl GhostUpdate {
     }
 }
 
-//------------------------------------------------------------------------//
+//---------------------------------- Fonction ----------------------------------//
+
+pub fn send_inter_shards_packet(
+    socket: &GamePeer,
+    msg: Box<dyn InterShardMessage>,
+    connection: &GameConnection,
+    stream: &GameStream,
+) {
+    let json = serde_json::to_string(&msg).unwrap();
+    let mut data = vec![0u8; 1 + json.len()];
+    data[0] = match msg.as_ref() {
+        m if m.is::<HandoffRequest>() => 0x20,
+        m if m.is::<HandoffAccept>() => 0x21,
+        m if m.is::<HandoffReject>() => 0x22,
+        m if m.is::<GhostUpdate>() => 0x23,
+        m if m.is::<HandoffComplete>() => 0x24,
+        _ => return,
+    };
+    data[1..].copy_from_slice(json.as_bytes());
+
+    let result = socket.send(connection.connection_id, stream.stream_id, &data);
+
+    if result.is_err() {
+        println!("Failed to send inter-shard message to connection id : {}, stream id : {}. Error: {:?}", connection.connection_id, stream.stream_id, result.err());
+    }
+}

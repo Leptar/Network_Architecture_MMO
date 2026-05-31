@@ -1,11 +1,18 @@
 ﻿use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use game_sockets::{GameConnection, GameStream};
 
 #[derive(Debug, Clone)]
-enum EntityAuthority {
+pub struct OtherShardConnectionInfo{
+    pub connection: GameConnection,
+    pub stream: GameStream,
+}
+
+#[derive(Debug, Clone)]
+pub enum EntityAuthority {
     Owned,
-    PendingHandoff { target_shard_addr: String },
-    Ghost { source_shard_addr: String },
+    PendingHandoff { target_shards: Vec<OtherShardConnectionInfo> },
+    Ghost { source_shard: OtherShardConnectionInfo },
 }
 
 /*************************************/
@@ -13,25 +20,15 @@ enum EntityAuthority {
 /*************************************/
 
 #[derive(Debug, Clone)]
-struct PlayerEntity {
-    id      : u32,
-    authority: EntityAuthority,
-    position: Vec2,
-    rotation: f32,
-    velocity: Vec2,
+pub struct PlayerEntity {
+    pub id      : u32,
+    pub authority: EntityAuthority,
+    pub position: Vec2,
+    pub rotation: f32,
+    pub velocity: Vec2,
 }
 
 impl PlayerEntity {
-    pub fn new(id: u32) -> Self {
-        PlayerEntity {
-            id,
-            authority: EntityAuthority::Owned,
-            position: Vec2::ZERO,
-            rotation: 0.0,
-            velocity: Vec2::ZERO,
-        }
-    }
-
     pub fn interpret_player_input(&mut self, input: [u8; 16]) {
         //TODO : TRAITEMENT DES INPUT
     }
@@ -40,4 +37,12 @@ impl PlayerEntity {
 #[derive(Resource)]
 pub struct PlayerRegistry {
     pub players: HashMap<u32, PlayerEntity>,
+}
+
+impl Default for PlayerRegistry {
+    fn default() -> Self {
+        PlayerRegistry {
+            players: HashMap::new(),
+        }
+    }
 }

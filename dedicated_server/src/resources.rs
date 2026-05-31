@@ -1,5 +1,7 @@
 ﻿use bevy::prelude::*;
-use game_sockets::{GamePeer};
+use game_sockets::{GameConnection, GamePeer, GameStream};
+use shared::*;
+use crate::message::{GhostUpdate, HandoffAccept, HandoffComplete, HandoffReject, HandoffRequest, InterShardMessage};
 
 #[derive(Resource)]
 pub struct ServerConfig {
@@ -8,6 +10,7 @@ pub struct ServerConfig {
     pub port: u16,
     pub zone: String,
     pub max_players: usize,
+    pub status: ServerSatus,
     pub orchestrator_addr: String,
 }
 
@@ -37,6 +40,8 @@ impl ServerConfig {
         let socket = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
         socket.connect("8.8.8.8:80").unwrap();
         let ip = socket.local_addr().unwrap().ip().to_string();
+
+        let status = ServerSatus::Available;
         
         Self {
             id,
@@ -44,8 +49,17 @@ impl ServerConfig {
             port,
             zone,
             max_players,
+            status,
             orchestrator_addr,
         }
+    }
+
+    pub fn verify_status(&mut self, player_count: usize) {
+        self.status = if player_count >= self.max_players {
+            ServerSatus::Full
+        } else {
+            ServerSatus::Available
+        };
     }
 }
 

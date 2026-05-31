@@ -1,5 +1,6 @@
 ﻿use bevy::prelude::*;
-use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent};
+use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent, GameConnection, GameStream};
+use shared::ServerSatus;
 use crate::resources::*;
 use crate::entities::*;
 use crate::message::*;
@@ -20,7 +21,8 @@ pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
 
 pub fn receive_packets(
     mut socket: ResMut<GameSocket>,
-    mut player_registry: PlayerRegistry
+    mut player_registry: ResMut<PlayerRegistry>,
+    mut server_config: ResMut<ServerConfig>
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
         match event {
@@ -32,7 +34,7 @@ pub fn receive_packets(
 
                 let msg_tag : u8 = data[0];
                 let msg_data = &data[1..];
-                let mut msg: Box<dyn ShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
+                let mut msg: Box<dyn InterShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
                     match msg_tag {
                         0x20 => Box::new(HandoffRequest::from_json(json)),
                         0x21 => Box::new(HandoffAccept::from_json(json)),
@@ -51,8 +53,8 @@ pub fn receive_packets(
                         _ => return,
                     }
                 };
-                
-                msg.resolve(&mut player_registry);
+
+                msg.resolve(&mut player_registry, &mut server_config, &socket, connection, stream);
             }
 
 
@@ -85,7 +87,7 @@ pub fn send_heartbeat(
         zone: config.zone.clone(),
         player_count: registry.players.len(),
         max_players: config.max_players,
-        status: if registry.players.len() < config.max_players { "available".to_string() } else { "full".to_string() }
+        status: config.status,
     };
 
     let json = serde_json::to_string(&heartbeat).unwrap();
