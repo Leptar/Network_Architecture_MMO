@@ -1,25 +1,14 @@
 ﻿use bevy::prelude::*;
-use std::collections::HashMap;
 use game_sockets::{GamePeer};
-use game_sockets::GameConnection;
 
 #[derive(Resource)]
 pub struct ServerConfig {
+    pub ip: String,
     pub id: String,
     pub port: u16,
     pub zone: String,
     pub max_players: usize,
     pub orchestrator_addr: String,
-}
-
-#[derive(Resource, Default)]
-pub struct PlayerRegistry {
-    pub players: HashMap<GameConnection, String>,
-}
-
-#[derive(Resource)]
-pub struct GameSocket {
-    pub peer: GamePeer,
 }
 
 impl ServerConfig {
@@ -45,8 +34,13 @@ impl ServerConfig {
         // ex: "550e8400-e29b-41d4-a716-446655440000"
         let id = uuid::Uuid::new_v4().to_string();
 
+        let socket = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
+        socket.connect("8.8.8.8:80").unwrap();
+        let ip = socket.local_addr().unwrap().ip().to_string();
+        
         Self {
             id,
+            ip,
             port,
             zone,
             max_players,
@@ -56,14 +50,14 @@ impl ServerConfig {
 }
 
 #[derive(Resource)]
+pub struct GameSocket {
+    pub peer: GamePeer,
+}
+
+#[derive(Resource)]
 pub struct HeartbeatTimer(pub Timer);
 impl Default for HeartbeatTimer {
     fn default() -> Self {
         Self(Timer::from_seconds(5.0, TimerMode::Repeating))
     }
-}
-
-#[derive(Resource, Default)]
-pub struct OrchestratorConnection {
-    pub connection: Option<game_sockets::GameConnection>,
 }

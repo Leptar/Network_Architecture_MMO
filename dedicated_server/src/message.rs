@@ -1,0 +1,172 @@
+﻿use bevy::prelude::*;
+use crate::entities::PlayerRegistry;
+
+pub trait ShardMessage {
+    fn resolve(&mut self, registry: &mut PlayerRegistry);
+}
+
+//------------------------------------------------------------------------//
+
+pub struct HandoffRequest{
+    entity_id: u32,
+    pos: Vec2,
+    vel: Vec2,
+    state: [u8; 64],
+}
+
+impl ShardMessage for HandoffRequest {
+    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+        println!("Resolving Handoff Request for {}", self.entity_id);
+    }
+}
+
+impl HandoffRequest {
+    pub fn from_json(json: serde_json::Value) -> Self {
+        HandoffRequest {
+            entity_id: json["entity_id"].as_u64().unwrap() as u32,
+            pos: Vec2::new(json["pos"]["x"].as_f64().unwrap() as f32, json["pos"]["y"].as_f64().unwrap() as f32),
+            vel: Vec2::new(json["vel"]["x"].as_f64().unwrap() as f32, json["vel"]["y"].as_f64().unwrap() as f32),
+            state: json["state"].as_str().unwrap().as_bytes()[..64].try_into().unwrap(),
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        //format entity_id: u32, pos: Vec2, vel: Vec2, state: [u8; 64]
+        HandoffRequest {
+            entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            pos: Vec2::new(
+                f32::from_le_bytes(data[4..8].try_into().unwrap()),
+                f32::from_le_bytes(data[8..12].try_into().unwrap())
+            ),
+            vel: Vec2::new(
+                f32::from_le_bytes(data[12..16].try_into().unwrap()),
+                f32::from_le_bytes(data[16..20].try_into().unwrap())
+            ),
+            state: data[20..84].try_into().unwrap(),
+        }
+    }
+}
+
+//------------------------------------------------------------------------//
+
+pub struct HandoffAccept{
+    entity_id: u32,
+}
+
+impl ShardMessage for HandoffAccept {
+    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+        println!("Resolving Handoff Accept for {}", self.entity_id);
+    }
+}
+
+impl HandoffAccept {
+    pub fn from_json(json: serde_json::Value) -> Self {
+        HandoffAccept {
+            entity_id: json["entity_id"].as_u64().unwrap() as u32,
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        //format entity_id: u32
+        HandoffAccept {
+            entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+        }
+    }
+}
+//------------------------------------------------------------------------//
+
+pub struct HandoffReject{
+    entity_id: u32,
+    reason: String,
+}
+
+impl ShardMessage for HandoffReject {
+    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+        println!("Resolving Handoff Reject for {} : {}", self.entity_id, self.reason);
+    }
+}
+
+impl HandoffReject {
+    pub fn from_json(json: serde_json::Value) -> Self {
+        HandoffReject {
+            entity_id: json["entity_id"].as_u64().unwrap() as u32,
+            reason: json["reason"].as_str().unwrap().to_string(),
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        //format entity_id: u32, reason: String (rest of the data)
+        HandoffReject {
+            entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            reason: String::from_utf8_lossy(&data[4..]).to_string(),
+        }
+    }
+}
+
+//------------------------------------------------------------------------//
+
+pub struct HandoffComplete{
+    entity_id: u32,
+}
+
+impl ShardMessage for HandoffComplete {
+    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+        println!("Resolving Handoff Complete for {}", self.entity_id);
+    }
+}
+
+impl HandoffComplete {
+    pub fn from_json(json: serde_json::Value) -> Self {
+        HandoffComplete {
+            entity_id: json["entity_id"].as_u64().unwrap() as u32,
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        //format entity_id: u32
+        HandoffComplete {
+            entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+        }
+    }
+}
+
+//------------------------------------------------------------------------//
+
+pub struct GhostUpdate{
+    entity_id: u32,
+    pos: Vec2,
+    vel: Vec2,
+}
+
+impl ShardMessage for GhostUpdate {
+    fn resolve(&mut self, registry: &mut PlayerRegistry) {
+        println!("Resolving Ghost Update for {}", self.entity_id);
+    }
+}
+
+impl GhostUpdate {
+    pub fn from_json(json: serde_json::Value) -> Self {
+        GhostUpdate {
+            entity_id: json["entity_id"].as_u64().unwrap() as u32,
+            pos: Vec2::new(json["pos"]["x"].as_f64().unwrap() as f32, json["pos"]["y"].as_f64().unwrap() as f32),
+            vel: Vec2::new(json["vel"]["x"].as_f64().unwrap() as f32, json["vel"]["y"].as_f64().unwrap() as f32),
+        }
+    }
+
+    pub fn from_data(data: &[u8]) -> Self {
+        //format entity_id: u32, pos: Vec2, vel: Vec2
+        GhostUpdate {
+            entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            pos: Vec2::new(
+                f32::from_le_bytes(data[4..8].try_into().unwrap()),
+                f32::from_le_bytes(data[8..12].try_into().unwrap())
+            ),
+            vel: Vec2::new(
+                f32::from_le_bytes(data[12..16].try_into().unwrap()),
+                f32::from_le_bytes(data[16..20].try_into().unwrap())
+            ),
+        }
+    }
+}
+
+//------------------------------------------------------------------------//

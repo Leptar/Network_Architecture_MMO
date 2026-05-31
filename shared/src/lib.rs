@@ -8,4 +8,5 @@ pub struct Heartbeat {
     pub zone: String,
     pub player_count: usize,
     pub max_players: usize,
+    pub status: String,
 }

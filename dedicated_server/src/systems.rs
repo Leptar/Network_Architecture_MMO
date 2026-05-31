@@ -1,6 +1,8 @@
 ﻿use bevy::prelude::*;
 use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent};
-use crate::resources::{ServerConfig, GameSocket, PlayerRegistry, HeartbeatTimer, OrchestratorConnection};
+use crate::resources::*;
+use crate::entities::*;
+use crate::message::*;
 
 pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
     let peer = GamePeer::new(UdpBackend::new());
@@ -13,53 +15,50 @@ pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
     peer.connect(orch_ip, orch_port).unwrap();
 
     commands.insert_resource(GameSocket { peer });
-    commands.insert_resource(OrchestratorConnection { connection: None });
     println!("Serveur démarré sur le port {}", config.port);
 }
 
 pub fn receive_packets(
     mut socket: ResMut<GameSocket>,
-    mut registry: ResMut<PlayerRegistry>,
-    mut orch_conn: ResMut<OrchestratorConnection>,
+    mut player_registry: PlayerRegistry
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
         match event {
             GameNetworkEvent::Message { connection, stream, data } => {
-                let msg = String::from_utf8_lossy(&data);
-                println!("Message reçu : {}", msg);
+                if data.is_empty() {
+                    println!("Received empty message from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
+                    continue;
+                }
 
-                // Parser le JSON pour extraire le username
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&msg) {
-                    if let Some(username) = json["username"].as_str() {
-
-                        // Générer un ID unique pour ce joueur
-                        let player_id = uuid::Uuid::new_v4().to_string();
-
-                        // Enregistrer le joueur
-                        registry.players.insert(connection, username.to_string());
-                        println!("Joueur {} connecté avec id {}", username, player_id);
-
-                        // Répondre WELCOME
-                        let response = serde_json::json!({
-                "player_id": player_id
-            }).to_string();
-
-                        let bytes = bytes::Bytes::from(response.into_bytes());
-                        let _ = socket.peer.send(&connection, &stream, bytes);
+                let msg_tag : u8 = data[0];
+                let msg_data = &data[1..];
+                let mut msg: Box<dyn ShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
+                    match msg_tag {
+                        0x20 => Box::new(HandoffRequest::from_json(json)),
+                        0x21 => Box::new(HandoffAccept::from_json(json)),
+                        0x22 => Box::new(HandoffReject::from_json(json)),
+                        0x23 => Box::new(GhostUpdate::from_json(json)),
+                        0x24 => Box::new(HandoffComplete::from_json(json)),
+                        _ => return,
                     }
-                }
-            }
-            GameNetworkEvent::Connected(conn) => {
-                println!("Connecté à : {:?}", conn);
-                // On stocke seulement si on n'a pas encore l'orchestrateur
-                if orch_conn.connection.is_none() {
-                    orch_conn.connection = Some(conn);
-                    println!("Orchestrateur enregistré !");
                 } else {
-                    println!("Nouveau joueur connecté : {:?}", conn);
-                }
+                    match msg_tag {
+                        0x20 => Box::new(HandoffRequest::from_data(msg_data)),
+                        0x21 => Box::new(HandoffAccept::from_data(msg_data)),
+                        0x22 => Box::new(HandoffReject::from_data(msg_data)),
+                        0x23 => Box::new(GhostUpdate::from_data(msg_data)),
+                        0x24 => Box::new(HandoffComplete::from_data(msg_data)),
+                        _ => return,
+                    }
+                };
+                
+                msg.resolve(&mut player_registry);
             }
-            _ => {}
+
+
+            _ => {
+                println!("WARNING : Event received does not match any expected event : {:?}", event);
+            }
         }
     }
 }
@@ -70,7 +69,6 @@ pub fn send_heartbeat(
     registry: Res<PlayerRegistry>,
     mut timer: ResMut<HeartbeatTimer>,
     time: Res<Time>,
-    orch_conn: Res<OrchestratorConnection>,
 ) {
     // Avance le timer
     timer.0.tick(time.delta());
@@ -82,11 +80,12 @@ pub fn send_heartbeat(
     // Construire le heartbeat
     let heartbeat = shared::Heartbeat {
         id: config.id.clone(),
-        ip: "127.0.0.1".to_string(),
+        ip: config.ip.clone(),
         port: config.port,
         zone: config.zone.clone(),
         player_count: registry.players.len(),
         max_players: config.max_players,
+        status: if registry.players.len() < config.max_players { "available".to_string() } else { "full".to_string() }
     };
 
     let json = serde_json::to_string(&heartbeat).unwrap();
