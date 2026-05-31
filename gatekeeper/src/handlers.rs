@@ -52,7 +52,7 @@ fn map_continent_to_zone(continent_code: &str) -> String {
         "NA" => "NA".to_string(),
         "SA" => "NA".to_string(),
         "AS" | "OC" => "ASIA".to_string(),
-        _ => "EU".to_string(), // Zone par défaut si on ne sait pas
+        _ => "zone_A".to_string(), // Zone par défaut si on ne sait pas
     }
 }
 
@@ -75,10 +75,10 @@ pub async fn login(
     }
 
     // default
-    let mut player_zone = "EU".to_string();
+    let mut player_zone = "zone_A".to_string();
 
     // check db geo pour deduire la zone
-    // Note : 127.0.0.1 = erreur donc par défaut = "EU"
+    // Note : 127.0.0.1 = erreur donc par défaut = "zone_A"
     if let Ok(lookup_result) = geo_db.lookup(client_ip) {
         if let Ok(Some(continent_code)) = lookup_result.decode_path::<String>(&path!["continent", "code"]) {
             // trad
