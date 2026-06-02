@@ -27,7 +27,7 @@ Le broker est le **seul point de contact** des clients. Ils ne connaissent pas l
 
 ## 2. Partie 1 — Broker PubSub (25 points)
 
-Le broker est un processus Bevy indépendant. C'est le **seul serveur** auquel les clients se connectent via `game_sockets`.
+Le broker est un processus indépendant. C'est le **seul serveur** auquel les clients se connectent via `game_sockets`.
 
 **Protocole de messages (binaire, little-endian) :**
 
