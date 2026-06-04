@@ -128,7 +128,13 @@ pub struct HandoffReject{
 
 impl InterShardMessage for HandoffReject {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
-        println!("Resolving Handoff Reject for {} : {}", self.entity_id, self.reason);
+        if let Some(player) = registry.players.get_mut(&self.entity_id) {
+            if let EntityAuthority::PendingHandoff { .. } = &player.authority {
+                println!("Handoff rejected for entity {}, reason: {}. Player entity stays Owned.", self.entity_id, self.reason);
+                player.authority = EntityAuthority::Owned;
+
+            }
+        }
     }
 }
 
@@ -157,7 +163,15 @@ pub struct HandoffComplete{
 
 impl InterShardMessage for HandoffComplete {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
-        println!("Resolving Handoff Complete for {}", self.entity_id);
+        if let Some(player) = registry.players.get_mut(&self.entity_id) {
+            if let EntityAuthority::Ghost { .. } = &player.authority {
+                println!("Handoff complete for entity {}. Player entity is now Owned on this shard.", self.entity_id);
+                player.authority = EntityAuthority::Owned;
+            } else if let EntityAuthority::PendingHandoff { .. } = &player.authority {
+                println!("Handoff complete for entity {}, but it was still pending. Removing player entity.", self.entity_id);
+                registry.players.remove(&self.entity_id);
+            }
+        }
     }
 }
 
@@ -186,7 +200,12 @@ pub struct GhostUpdate{
 
 impl InterShardMessage for GhostUpdate {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
-        println!("Resolving Ghost Update for {}", self.entity_id);
+        if let Some(player) = registry.players.get_mut(&self.entity_id) {
+            if let EntityAuthority::Ghost { .. } = &player.authority {
+                player.position = self.pos;
+                player.velocity = self.vel;
+            }
+        }
     }
 }
 
