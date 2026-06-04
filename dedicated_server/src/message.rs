@@ -1,5 +1,4 @@
-﻿use std::cmp::PartialEq;
-use bevy::prelude::*;
+﻿use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 use shared::ServerSatus;
 use crate::entities::*;
@@ -7,6 +6,8 @@ use crate::resources::*;
 
 pub trait  InterShardMessage {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream);
+    fn tag(&self) -> u8;
+    fn to_json(&self) -> serde_json::Value;
 }
 
 //---------------------------------- HandoffRequest ----------------------------------//
@@ -59,6 +60,19 @@ impl InterShardMessage for HandoffRequest {
             send_inter_shards_packet(&socket.peer, Box::new(reject_msg), &connection, &stream);
         }
     }
+
+    fn tag(&self) -> u8 {
+        0x20
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "entity_id": self.entity_id,
+            "pos": {"x": self.pos.x, "y": self.pos.y},
+            "vel": {"x": self.vel.x, "y": self.vel.y},
+            "state": String::from_utf8_lossy(&self.state),
+        })
+    }
 }
 
 impl HandoffRequest {
@@ -95,12 +109,22 @@ pub struct HandoffAccept {
 }
 
 impl InterShardMessage for HandoffAccept {
-    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, connection: GameConnection, stream: GameStream) {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, _server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::PendingHandoff { .. } = &player.authority {
                 println!("Handoff accepted for entity {}, GhostUpdates will begin.", self.entity_id);
             }
         }
+    }
+
+    fn tag(&self) -> u8 {
+        0x21
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "entity_id": self.entity_id,
+        })
     }
 }
 
@@ -127,7 +151,7 @@ pub struct HandoffReject{
 }
 
 impl InterShardMessage for HandoffReject {
-    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, _server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::PendingHandoff { .. } = &player.authority {
                 println!("Handoff rejected for entity {}, reason: {}. Player entity stays Owned.", self.entity_id, self.reason);
@@ -135,6 +159,17 @@ impl InterShardMessage for HandoffReject {
 
             }
         }
+    }
+
+    fn tag(&self) -> u8 {
+        0x22
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "entity_id": self.entity_id,
+            "reason": self.reason,
+        })
     }
 }
 
@@ -162,7 +197,7 @@ pub struct HandoffComplete{
 }
 
 impl InterShardMessage for HandoffComplete {
-    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, _server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::Ghost { .. } = &player.authority {
                 println!("Handoff complete for entity {}. Player entity is now Owned on this shard.", self.entity_id);
@@ -172,6 +207,16 @@ impl InterShardMessage for HandoffComplete {
                 registry.players.remove(&self.entity_id);
             }
         }
+    }
+
+    fn tag(&self) -> u8 {
+        0x24
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "entity_id": self.entity_id,
+        })
     }
 }
 
@@ -193,19 +238,31 @@ impl HandoffComplete {
 //---------------------------------- GhostUpdate ----------------------------------//
 
 pub struct GhostUpdate{
-    entity_id: u32,
-    pos: Vec2,
-    vel: Vec2,
+    pub entity_id: u32,
+    pub pos: Vec2,
+    pub vel: Vec2,
 }
 
 impl InterShardMessage for GhostUpdate {
-    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
+    fn resolve(&mut self, registry: &mut PlayerRegistry, _server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::Ghost { .. } = &player.authority {
                 player.position = self.pos;
                 player.velocity = self.vel;
             }
         }
+    }
+
+    fn tag(&self) -> u8 {
+        0x23
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "entity_id": self.entity_id,
+            "pos": {"x": self.pos.x, "y": self.pos.y},
+            "vel": {"x": self.vel.x, "y": self.vel.y},
+        })
     }
 }
 
@@ -242,21 +299,14 @@ pub fn send_inter_shards_packet(
     connection: &GameConnection,
     stream: &GameStream,
 ) {
-    let json = serde_json::to_string(&msg).unwrap();
+    let json = msg.to_json().to_string();
     let mut data = vec![0u8; 1 + json.len()];
-    data[0] = match msg.as_ref() {
-        m if m.is::<HandoffRequest>() => 0x20,
-        m if m.is::<HandoffAccept>() => 0x21,
-        m if m.is::<HandoffReject>() => 0x22,
-        m if m.is::<GhostUpdate>() => 0x23,
-        m if m.is::<HandoffComplete>() => 0x24,
-        _ => return,
-    };
+    data[0] = msg.tag();
     data[1..].copy_from_slice(json.as_bytes());
 
-    let result = socket.send(connection.connection_id, stream.stream_id, &data);
+    let result = socket.send(connection, stream, bytes::Bytes::from(data));
 
     if result.is_err() {
-        println!("Failed to send inter-shard message to connection id : {}, stream id : {}. Error: {:?}", connection.connection_id, stream.stream_id, result.err());
+        println!("Failed to send inter-shard message. Error: {:?}", result.err());
     }
 }

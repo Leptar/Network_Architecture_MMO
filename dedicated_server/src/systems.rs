@@ -1,6 +1,5 @@
 ﻿use bevy::prelude::*;
-use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent, GameConnection, GameStream};
-use shared::ServerSatus;
+use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent};
 use crate::resources::*;
 use crate::entities::*;
 use crate::message::*;
@@ -96,4 +95,28 @@ pub fn send_heartbeat(
     let udp_socket = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
     udp_socket.send_to(json.as_bytes(), &config.orchestrator_addr).unwrap();
     //println!("Heartbeat envoyé !");
+}
+
+pub fn send_ghost_update(
+    mut socket: ResMut<GameSocket>,
+    registry: Res<PlayerRegistry>,
+) {
+    for player in registry.players.values() {
+        if let EntityAuthority::PendingHandoff { target_shard } = &player.authority {
+            let ghost_update = GhostUpdate {
+                entity_id: player.id,
+                pos: player.position,
+                vel: player.velocity,
+            };
+
+            let msg = Box::new(ghost_update);
+
+            send_inter_shards_packet(
+                &socket.peer,
+                msg,
+                &target_shard.connection,
+                &target_shard.stream,
+            );
+        }
+    }
 }
