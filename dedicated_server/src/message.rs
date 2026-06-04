@@ -1,4 +1,5 @@
-﻿use bevy::prelude::*;
+﻿use std::cmp::PartialEq;
+use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 use shared::ServerSatus;
 use crate::entities::*;
@@ -89,13 +90,17 @@ impl HandoffRequest {
 
 //---------------------------------- HandoffAccept ----------------------------------//
 
-pub struct HandoffAccept{
+pub struct HandoffAccept {
     entity_id: u32,
 }
 
 impl InterShardMessage for HandoffAccept {
-    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
-        println!("Resolving Handoff Accept for {}", self.entity_id);
+    fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, _socket: &GameSocket, connection: GameConnection, stream: GameStream) {
+        if let Some(player) = registry.players.get_mut(&self.entity_id) {
+            if let EntityAuthority::PendingHandoff { .. } = &player.authority {
+                println!("Handoff accepted for entity {}, GhostUpdates will begin.", self.entity_id);
+            }
+        }
     }
 }
 

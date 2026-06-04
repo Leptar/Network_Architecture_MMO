@@ -2,17 +2,28 @@
 use bevy::prelude::*;
 use game_sockets::{GameConnection, GameStream};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OtherShardConnectionInfo{
     pub connection: GameConnection,
     pub stream: GameStream,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EntityAuthority {
     Owned,
-    PendingHandoff { target_shards: Vec<OtherShardConnectionInfo> },
+    PendingHandoff { target_shard: OtherShardConnectionInfo },
     Ghost { source_shard: OtherShardConnectionInfo },
+}
+
+impl PartialEq for EntityAuthority {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (EntityAuthority::Owned, EntityAuthority::Owned) => true,
+            (EntityAuthority::PendingHandoff, EntityAuthority::PendingHandoff) => true,
+            (EntityAuthority::Ghost, EntityAuthority::Ghost) => true,
+            _ => false,
+        }
+    }
 }
 
 /*************************************/
