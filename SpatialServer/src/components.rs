@@ -17,5 +17,5 @@ pub struct NearbyShards(pub Vec<u32>);
 #[derive(Resource)]
 pub struct SpatialSocket {
     pub peer: GamePeer,
-    pub broker_conn: GameConnection,
+    pub broker_conn: Option<GameConnection>,
 }
