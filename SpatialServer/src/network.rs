@@ -1,6 +1,6 @@
 ﻿use bevy::prelude::*;
 use game_sockets::*;
-use crate::components::{ClientId, Position, SpatialSocket};
+use crate::components::{ClientId, CurrentShard, NearbyShards, Position, SpatialSocket};
 use bytes::Bytes;
 use game_sockets::protocols::UdpBackend;
 use crate::messages::*;
@@ -50,8 +50,32 @@ pub fn receive_position_updates(
                 let rest = &data[1..];
 
                 if tag == 0x10 {
-                    // C'est ici qu'on mettra notre logique de from_le_bytes
-                    // pour lire le client_id, x et y !
+                    if rest.len() < 12 { continue; }
+
+                    let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
+                    let x = f32::from_le_bytes([rest[4], rest[5], rest[6], rest[7]]);
+                    let y = f32::from_le_bytes([rest[8], rest[9], rest[10], rest[11]]);
+                    let nouvelle_position = Vec2::new(x, y);
+
+                    let mut joueur_trouve = false;
+
+                    for (_, id, mut pos) in query.iter_mut() {
+                        if id.0 == client_id {
+                            pos.0 = nouvelle_position;
+                            joueur_trouve = true;
+                            break;
+                        }
+                    }
+
+                    if !joueur_trouve {
+                        println!("Nouveau joueur {} détecté via le réseau en {}, {}", client_id, x, y);
+                        commands.spawn((
+                            ClientId(client_id),
+                            Position(nouvelle_position),
+                            CurrentShard(None),        // Il n'a pas encore de shard assigné
+                            NearbyShards(Vec::new()),  // Mémoire radar vide au départ
+                        ));
+                    }
                 }
             }
             _ => {}
