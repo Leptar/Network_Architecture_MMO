@@ -1,5 +1,4 @@
 ﻿use bevy::prelude::*;
-use bevy::ecs::event::Event;
 use crate::components::{CurrentShard, Position, ClientId, NearbyShards};
 use crate::messages::{CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::quadtree::QuadTree;

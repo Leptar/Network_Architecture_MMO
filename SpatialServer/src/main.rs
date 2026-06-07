@@ -10,7 +10,6 @@ use std::time::Duration;
 use crate::messages::{CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::network::receive_position_updates;
 use crate::test_file::move_fake_player;
-// use shared::*;
 
 fn main() {
     println!("Démarrage du Service Spatial...");
@@ -22,8 +21,14 @@ fn main() {
         .add_message::<SubscribeMessage>()
         .add_message::<UnsubscribeMessage>()
         .add_message::<CrossingAlertMessage>()
-        .add_systems(Startup, test_file::setup_simulation)
-        .add_systems(Update, (move_fake_player, spatial_logic::check_shard_transitions, receive_position_updates))
+        .add_systems(Startup, (
+            network::connect_to_broker  // On lance la connexion réseau
+        ))
+        .add_systems(Update, (
+            network::receive_position_updates,
+            spatial_logic::check_shard_transitions,
+            network::flush_network_messages
+        ).chain())
         .run();
 }
 
