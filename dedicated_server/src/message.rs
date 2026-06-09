@@ -1,6 +1,6 @@
 ﻿use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::ServerSatus;
+use shared::ServerStatus;
 use crate::entities::*;
 use crate::resources::*;
 
@@ -23,7 +23,7 @@ impl InterShardMessage for HandoffRequest {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream) {
         println!("Resolving Handoff Request for {}", self.entity_id);
 
-        if server_config.status == ServerSatus::Available {
+        if server_config.status == ServerStatus::Available {
             let new_ghost_player = PlayerEntity{
                 id: self.entity_id,
                 authority: EntityAuthority::Ghost { source_shard : OtherShardConnectionInfo {

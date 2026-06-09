@@ -72,7 +72,7 @@ async fn heartbeat_listener(client: redis::Client) {
                 .arg("zone").arg(&heartbeat.zone)
                 .arg("player_count").arg(heartbeat.player_count)
                 .arg("max_players").arg(heartbeat.max_players)
-                .arg("status").arg(if heartbeat.status == shared::ServerSatus::Available { "available" } else { "full" })
+                .arg("status").arg(if heartbeat.status == shared::ServerStatus::Available { "available" } else { "full" })
                 .query(&mut con).expect("Failed to update Redis");
 
             let _: () = redis::cmd("EXPIRE")

@@ -1,0 +1,13 @@
+[package]
+name = "client"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+shared.workspace = true
+tokio.workspace = true
+game_sockets.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+rand.workspace = true

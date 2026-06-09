@@ -15,17 +15,6 @@ pub enum EntityAuthority {
     Ghost { source_shard: OtherShardConnectionInfo },
 }
 
-impl PartialEq for EntityAuthority {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (EntityAuthority::Owned, EntityAuthority::Owned) => true,
-            (EntityAuthority::PendingHandoff, EntityAuthority::PendingHandoff) => true,
-            (EntityAuthority::Ghost, EntityAuthority::Ghost) => true,
-            _ => false,
-        }
-    }
-}
-
 /*************************************/
 /*           PLAYER ENTITY           */
 /*************************************/

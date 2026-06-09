@@ -40,7 +40,10 @@ pub fn receive_packets(
                         0x22 => Box::new(HandoffReject::from_json(json)),
                         0x23 => Box::new(GhostUpdate::from_json(json)),
                         0x24 => Box::new(HandoffComplete::from_json(json)),
-                        _ => return,
+                        _ => {
+                            println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                            return;
+                        },
                     }
                 } else {
                     match msg_tag {
@@ -49,7 +52,10 @@ pub fn receive_packets(
                         0x22 => Box::new(HandoffReject::from_data(msg_data)),
                         0x23 => Box::new(GhostUpdate::from_data(msg_data)),
                         0x24 => Box::new(HandoffComplete::from_data(msg_data)),
-                        _ => return,
+                        _ => {
+                            println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                            return;
+                        },
                     }
                 };
 
@@ -98,7 +104,7 @@ pub fn send_heartbeat(
 }
 
 pub fn send_ghost_update(
-    mut socket: ResMut<GameSocket>,
+    mut socket: Res<GameSocket>,
     registry: Res<PlayerRegistry>,
 ) {
     for player in registry.players.values() {
