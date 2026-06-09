@@ -10,7 +10,7 @@ pub struct ServerConfig {
     pub port: u16,
     pub zone: String,
     pub max_players: usize,
-    pub status: ServerSatus,
+    pub status: ServerStatus,
     pub orchestrator_addr: String,
 }
 
@@ -41,7 +41,7 @@ impl ServerConfig {
         socket.connect("8.8.8.8:80").unwrap();
         let ip = socket.local_addr().unwrap().ip().to_string();
 
-        let status = ServerSatus::Available;
+        let status = ServerStatus::Available;
         
         Self {
             id,
@@ -56,9 +56,9 @@ impl ServerConfig {
 
     pub fn verify_status(&mut self, player_count: usize) {
         self.status = if player_count >= self.max_players {
-            ServerSatus::Full
+            ServerStatus::Full
         } else {
-            ServerSatus::Available
+            ServerStatus::Available
         };
     }
 }
