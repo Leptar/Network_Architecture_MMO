@@ -24,12 +24,12 @@ pub(crate) fn check_shard_transitions(
                 println!("Unsubscribe du shard: {}", ancien_id.to_string());
             }
 
-            if let Some(new_Id) = actual_shard {
+            if let Some(new_id) = actual_shard {
                 sub_evts.write(SubscribeMessage {
                     client_id: client_id.0,
-                    topic: new_Id,
+                    topic: new_id,
                 });
-                println!("Subscribe du shard: {}", new_Id.to_string());
+                println!("Subscribe du shard: {}", new_id.to_string());
             }
 
             current_shard.0 = actual_shard;
