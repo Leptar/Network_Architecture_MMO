@@ -7,10 +7,10 @@ mod network;
 
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use std::time::Duration;
+use bevy::platform::collections::HashMap;
+use crate::components::PlayerEntities;
 use crate::messages::{CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
-use crate::network::receive_position_updates;
 use crate::quadtree::QuadTree;
-use crate::test_file::move_fake_player;
 
 fn main() {
     println!("Démarrage du Service Spatial...");
@@ -22,9 +22,10 @@ fn main() {
         .add_message::<SubscribeMessage>()
         .add_message::<UnsubscribeMessage>()
         .add_message::<CrossingAlertMessage>()
+        .init_resource::<PlayerEntities>()
         .add_systems(Startup, (
             network::connect_to_broker, // On lance la connexion réseau
-            init_spatial_service, // create quadtree
+            init_spatial_service,
         ))
         .add_systems(Update, (
             network::receive_position_updates,
@@ -40,5 +41,8 @@ fn init_spatial_service(mut commands: Commands) {
 
     let quad_tree = QuadTree::generate(bounds, max_depth);
 
-commands.insert_resource(quad_tree);
+    commands.insert_resource(quad_tree);
+    commands.insert_resource(PlayerEntities {
+        map: HashMap::new(),
+    });
 }

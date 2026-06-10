@@ -1,7 +1,11 @@
-﻿use bevy::prelude::*;
+﻿use bevy::platform::collections::HashMap;
+use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer};
-use crate::quadtree::QuadTree;
 
+#[derive(Resource, Default)]
+pub struct PlayerEntities {
+    pub map: HashMap<u32, Entity>,
+}
 #[derive(Component)]
 pub struct ClientId(pub u32);
 
