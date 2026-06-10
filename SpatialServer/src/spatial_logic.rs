@@ -1,4 +1,5 @@
-﻿use bevy::prelude::*;
+﻿use bevy::platform::collections::HashMap;
+use bevy::prelude::*;
 use crate::components::{CurrentShard, Position, ClientId, NearbyShards};
 use crate::messages::{CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::quadtree::QuadTree;
@@ -48,6 +49,45 @@ pub(crate) fn check_shard_transitions(
                 }
 
                 nearby_shards.0 = current_shards_near;
+            }
+        }
+    }
+}
+
+// STUB : ptetre def le nombre max dans lib
+const MAX_PLAYERS_PER_SHARD: usize = 1000;
+
+pub fn monitor_shard_capacity(
+    mut quad_tree: ResMut<QuadTree>,
+    query: Query<&CurrentShard>,
+    // A voir comment je recupere le next id
+    // mut id_generator: ResMut<ShardIdGenerator>,
+) {
+    // dictionnaire pour faire le décompte
+    let mut shard_counts: HashMap<u32, usize> = HashMap::new();
+
+    // joueurs du serveur spatial
+    for current_shard in query.iter() {
+        if let Some(shard_id) = current_shard.0 {
+            *shard_counts.entry(shard_id).or_insert(0) += 1;
+        }
+    }
+
+    // Un ID temporaire en attendant
+    let mut next_available_id = 9000;
+
+    for (shard_id, count) in shard_counts {
+        if count >= MAX_PLAYERS_PER_SHARD {
+            println!("SURCHARGE DÉTECTÉE : Le Shard {} a {} joueurs (Max: {})", shard_id, count, MAX_PLAYERS_PER_SHARD);
+
+            if let Some(new_shards) = quad_tree.split_shard(shard_id, &mut next_available_id) {
+                println!("QuadTree mis à jour. Nouveaux Shards à lancer :");
+                for (new_id, bounds) in new_shards {
+                    println!("  ➡️ Shard {} -> Zone: {:?}", new_id, bounds);
+
+                    // TODO: Pousser un événement Bevy (ex: BootShardEvent)
+                    // qui sera lu par un système réseau pour avertir l'Orchestrator.
+                }
             }
         }
     }
