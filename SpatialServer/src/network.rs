@@ -107,8 +107,9 @@ pub(crate) fn flush_network_messages(
             buffer.extend_from_slice(&topic_bytes);
 
             // Envoi via la socket
-            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer.clone()));
-            println!("[RÉSEAU] Envoi Subscribe ({} octets) pour le client {}", buffer.len(), sub.client_id);
+            let len = buffer.len();
+            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
+            println!("[RÉSEAU] Envoi Subscribe ({} octets) pour le client {}", len, sub.client_id);
         }
 
         // Tag 0x02
@@ -125,8 +126,9 @@ pub(crate) fn flush_network_messages(
             buffer.extend_from_slice(&topic_bytes);
 
             // Envoi via la socket
-            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer.clone()));
-            println!("[RÉSEAU] Envoi Unsubscribe ({} octets) pour le client {}", buffer.len(), unsub.client_id);
+            let len = buffer.len();
+            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
+            println!("[RÉSEAU] Envoi Unsubscribe ({} octets) pour le client {}", len, unsub.client_id);
         }
 
         // Tag 0x03
@@ -157,8 +159,9 @@ pub(crate) fn flush_network_messages(
             buffer.extend_from_slice(&payload);
 
             // Envoi via la socket
-            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer.clone()));
-            println!("[RÉSEAU] Envoi CrossingAlert vers {}: {:?}", topic_str, buffer);
+            let len = buffer.len();
+            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
+            println!("[RÉSEAU] Envoi CrossingAlert vers {} ({} octets)", topic_str, len);
         }
     }
 
