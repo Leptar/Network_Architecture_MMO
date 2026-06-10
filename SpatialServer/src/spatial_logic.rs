@@ -73,9 +73,14 @@ pub fn monitor_shard_capacity(
         }
     }
 
-    // Un ID temporaire en attendant
-    let mut next_available_id = 9000;
-
+    // Calcule un ID libre à partir de l'état actuel de l'arbre (évite les collisions)
+    let mut next_available_id = quad_tree
+        .get_leaves()
+        .into_iter()
+        .map(|(id, _)| id)
+        .max()
+        .unwrap_or(0)
+        + 1;
     for (shard_id, count) in shard_counts {
         if count >= MAX_PLAYERS_PER_SHARD {
             println!("SURCHARGE DÉTECTÉE : Le Shard {} a {} joueurs (Max: {})", shard_id, count, MAX_PLAYERS_PER_SHARD);
