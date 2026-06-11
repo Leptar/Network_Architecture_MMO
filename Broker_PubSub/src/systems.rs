@@ -92,7 +92,7 @@ pub fn receive_messages(
                         let payload_len = u16::from_le_bytes([rest[32], rest[33]]) as usize;
 
                         // Lire le payload
-                        if rest.len() < 34 + payload_len { return; }
+                        if rest.len() < 34 + payload_len { continue; }
                         let payload = &rest[34..34 + payload_len];
 
                         println!("Publish sur '{}' ({} bytes)", topic, payload_len);
