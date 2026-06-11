@@ -117,7 +117,7 @@ pub fn receive_messages(
                         }
                     }
                     0x05 => {
-                        if rest.len() < 20 { return; } // 4 (client_id) + 16 (input)
+                        if rest.len() < 20 { continue; } // 4 (client_id) + 16 (input)
 
                         let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
                         let input = &rest[4..20];
