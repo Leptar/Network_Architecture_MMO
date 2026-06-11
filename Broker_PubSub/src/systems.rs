@@ -52,10 +52,12 @@ pub fn receive_messages(
                             .trim_matches('\0')
                             .to_string();
 
-                        subs.subscriptions
+                        let subscribers = subs.subscriptions
                             .entry(topic.clone())
-                            .or_insert_with(Vec::new)
-                            .push(client_id);
+                            .or_insert_with(Vec::new);
+                        if !subscribers.contains(&client_id) {
+                            subscribers.push(client_id);
+                        }
 
                         // Mettre à jour la map inversée
                         shard_map.map.insert(client_id, topic.clone());
