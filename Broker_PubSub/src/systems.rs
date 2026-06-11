@@ -98,19 +98,20 @@ pub fn receive_messages(
                         println!("Publish sur '{}' ({} bytes)", topic, payload_len);
 
                         // Construire le message Broadcast (0x04)
-                        let mut broadcast = Vec::new();
+                        let mut broadcast = Vec::with_capacity(1 + 2 + payload_len);
                         broadcast.push(0x04u8);
                         broadcast.extend_from_slice(&(payload_len as u16).to_le_bytes());
                         broadcast.extend_from_slice(payload);
+                        let broadcast = bytes::Bytes::from(broadcast);
 
                         // Envoyer à tous les abonnés
                         if let Some(subscribers) = subs.subscriptions.get(&topic) {
-                            for client_id in subscribers.clone() {
+                            for &client_id in subscribers {
                                 if let Some(conn) = clients.clients.get(&client_id) {
                                     let _ = socket.peer.send(
                                         conn,
                                         &stream,
-                                        bytes::Bytes::from(broadcast.clone())
+                                        broadcast.clone()
                                     );
                                 }
                             }
