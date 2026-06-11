@@ -33,7 +33,7 @@ pub fn receive_messages(
 
                 match tag {
                     0x00 => {
-                        if rest.len() < 32 { return; }
+                        if rest.len() < 32 { continue; }
 
                         let topic = String::from_utf8_lossy(&rest[0..32])
                             .trim_matches('\0')
