@@ -82,7 +82,7 @@ pub fn receive_messages(
                         println!("Client {} désabonné de '{}'", client_id, topic);
                     }
                     0x03 => {
-                        if rest.len() < 34 { return; }
+                        if rest.len() < 34 { continue; }
                         
                         let topic = String::from_utf8_lossy(&rest[0..32])
                             .trim_matches('\0')
