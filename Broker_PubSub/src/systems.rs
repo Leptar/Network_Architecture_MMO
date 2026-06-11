@@ -63,7 +63,7 @@ pub fn receive_messages(
                         println!("Client {} abonné à '{}'", client_id, topic);
                     }
                     0x02 => {
-                        if rest.len() < 36 { return; }
+                        if rest.len() < 36 { continue; }
 
                         let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
                         let topic = String::from_utf8_lossy(&rest[4..36])
