@@ -9,7 +9,7 @@ COPY dedicated_server/ ./dedicated_server/
 COPY shared/ ./shared/
 COPY orchestrator/ ./orchestrator/
 COPY gatekeeper/ ./gatekeeper/
-COPY broker_pubsub/ ./broker_pubsub/
+COPY Broker_PubSub/ ./Broker_PubSub/
 
 # Dépendances nécessaires pour game_sockets
 RUN apt-get update && apt-get install -y \
