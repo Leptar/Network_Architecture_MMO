@@ -230,4 +230,119 @@ mod tests {
         assert!(near.contains(&2));
         assert_eq!(near.len(), 2);
     }
+
+    #[test]
+    fn test_shard_for_out_of_bounds() {
+        let tree = create_test_tree();
+
+        // Un point en dehors de l'arbre (qui fait 0..100) doit retourner None
+        assert_eq!(tree.shard_for(Vec2::new(-10.0, 50.0)), None);
+        assert_eq!(tree.shard_for(Vec2::new(150.0, 150.0)), None);
+    }
+
+    #[test]
+    fn test_shards_near_center_intersection() {
+        let tree = create_test_tree();
+
+        // Un point exactement au centre (50, 50) avec une marge doit toucher les 4 shards
+        let near = tree.shards_near(Vec2::new(50.0, 50.0), 2.0);
+
+        assert_eq!(near.len(), 4);
+        assert!(near.contains(&1));
+        assert!(near.contains(&2));
+        assert!(near.contains(&3));
+        assert!(near.contains(&4));
+    }
+
+    #[test]
+    fn test_shards_near_out_of_bounds_returns_empty() {
+        let tree = create_test_tree();
+
+        // Un joueur loin en dehors de la carte, même avec une marge, ne touche aucun shard
+        let near = tree.shards_near(Vec2::new(-100.0, -100.0), 10.0);
+        assert!(near.is_empty());
+    }
+
+    #[test]
+    fn test_generate_and_get_leaves() {
+        let bounds = Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
+
+        // On génère un arbre avec max_depth = 2
+        // À depth=0 : 1 noeud parent
+        // À depth=1 : 4 enfants parents
+        // À depth=2 : 16 feuilles (4x4)
+        let tree = QuadTree::generate(bounds, 2);
+
+        let leaves = tree.get_leaves();
+
+        // On doit avoir exactement 4^2 = 16 shards
+        assert_eq!(leaves.len(), 16);
+
+        // Les identifiants doivent aller de 1 à 16
+        let mut ids: Vec<u32> = leaves.iter().map(|(id, _)| *id).collect();
+        ids.sort();
+        let expected_ids: Vec<u32> = (1..=16).collect();
+        assert_eq!(ids, expected_ids);
+    }
+
+    #[test]
+    fn test_split_shard_success() {
+        let bounds = Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
+        // Génère un arbre de profondeur 1 (4 shards : 1, 2, 3, 4)
+        let mut tree = QuadTree::generate(bounds, 1);
+
+        // On simule que l'arbre autorise une profondeur supplémentaire
+        tree.max_depth = 2;
+
+        let mut next_id = 5; // Les prochains shards commenceront à l'ID 5
+
+        // On tente de diviser le Shard numéro 1
+        let new_shards_opt = tree.split_shard(1, &mut next_id);
+
+        assert!(new_shards_opt.is_some());
+        let new_shards = new_shards_opt.unwrap();
+
+        // Ça doit créer 4 nouveaux shards
+        assert_eq!(new_shards.len(), 4);
+
+        // Vérification des nouveaux IDs
+        let mut new_ids: Vec<u32> = new_shards.iter().map(|(id, _)| *id).collect();
+        new_ids.sort();
+        assert_eq!(new_ids, vec![5, 6, 7, 8]);
+
+        // On vérifie que l'arbre global a été mis à jour correctement
+        let leaves = tree.get_leaves();
+        // 4 originaux - 1 détruit + 4 nouveaux = 7 feuilles
+        assert_eq!(leaves.len(), 7);
+
+        // Le shard 1 ne doit plus être une feuille
+        let has_shard_1 = leaves.iter().any(|(id, _)| *id == 1);
+        assert!(!has_shard_1);
+    }
+
+    #[test]
+    fn test_split_shard_fails_at_max_depth() {
+        let bounds = Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
+        // Génère un arbre de profondeur 1, max_depth = 1
+        let mut tree = QuadTree::generate(bounds, 1);
+
+        let mut next_id = 5;
+
+        // Tente de diviser le shard 1 alors qu'on est déjà à max_depth
+        let result = tree.split_shard(1, &mut next_id);
+
+        // La division doit être refusée
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_split_shard_not_found() {
+        let mut tree = create_test_tree();
+        let mut next_id = 5;
+
+        // On tente de diviser un shard qui n'existe pas (ID 99)
+        let result = tree.split_shard(99, &mut next_id);
+
+        assert!(result.is_none());
+    }
 }
