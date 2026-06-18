@@ -1,14 +1,15 @@
 ﻿use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use game_sockets::{GameConnection, GameStream};
+use game_sockets::{GameConnection, GamePeer, GameStream};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct OtherShardConnectionInfo{
+    pub peer : GamePeer,
     pub connection: GameConnection,
     pub stream: GameStream,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub enum EntityAuthority {
     Owned,
     PendingHandoff { target_shard: OtherShardConnectionInfo },
@@ -19,7 +20,7 @@ pub enum EntityAuthority {
 /*           PLAYER ENTITY           */
 /*************************************/
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PlayerEntity {
     pub id      : u32,
     pub authority: EntityAuthority,

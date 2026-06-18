@@ -3,18 +3,25 @@ use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent};
 use crate::resources::*;
 use crate::entities::*;
 use crate::message::*;
+use shared::*;
 
 pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
-    let peer = GamePeer::new(UdpBackend::new());
-    peer.listen("0.0.0.0", config.port).unwrap();
-
     // Se connecter à l'orchestrateur
+    let peer_orch = GamePeer::new(UdpBackend::new());
+    peer_orch.listen("0.0.0.0", config.port).unwrap();
+    
     let parts: Vec<&str> = config.orchestrator_addr.split(':').collect();
     let orch_ip = parts[0];
     let orch_port: u16 = parts[1].parse().unwrap();
-    peer.connect(orch_ip, orch_port).unwrap();
+    peer_orch.connect(orch_ip, orch_port).unwrap();
+    
+    //connecte au broker
+    let peer_broker = GamePeer::new(UdpBackend::new());
+    peer_broker.listen("0.0.0.0", config.port).unwrap();
+    
+    peer_orch.connect(BROK_IP, BROK_PORT).unwrap();
 
-    commands.insert_resource(GameSocket { peer });
+    commands.insert_resource(GameSocket { peer_orch, peer_broker });
     println!("Serveur démarré sur le port {}", config.port);
 }
 
@@ -23,7 +30,8 @@ pub fn receive_packets(
     mut player_registry: ResMut<PlayerRegistry>,
     mut server_config: ResMut<ServerConfig>
 ) {
-    while let Ok(Some(event)) = socket.peer.poll() {
+    //receive packet from broker :
+    while let Ok(Some(event)) = socket.peer_broker.poll() {
         match event {
             GameNetworkEvent::Message { connection, stream, data } => {
                 if data.is_empty() {
@@ -31,15 +39,15 @@ pub fn receive_packets(
                     continue;
                 }
 
-                let msg_tag : u8 = data[0];
+                let msg_tag: u8 = data[0];
                 let msg_data = &data[1..];
                 let mut msg: Box<dyn InterShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
                     match msg_tag {
-                        0x20 => Box::new(HandoffRequest::from_json(json)),
-                        0x21 => Box::new(HandoffAccept::from_json(json)),
-                        0x22 => Box::new(HandoffReject::from_json(json)),
-                        0x23 => Box::new(GhostUpdate::from_json(json)),
-                        0x24 => Box::new(HandoffComplete::from_json(json)),
+                        HandoffRequest::tag() => Box::new(HandoffRequest::from_json(json)),
+                        HandoffAccept::tag() => Box::new(HandoffAccept::from_json(json)),
+                        HandoffReject::tag() => Box::new(HandoffReject::from_json(json)),
+                        GhostUpdate::tag() => Box::new(GhostUpdate::from_json(json)),
+                        HandoffComplete::tag() => Box::new(HandoffComplete::from_json(json)),
                         _ => {
                             println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
                             return;
@@ -47,11 +55,11 @@ pub fn receive_packets(
                     }
                 } else {
                     match msg_tag {
-                        0x20 => Box::new(HandoffRequest::from_data(msg_data)),
-                        0x21 => Box::new(HandoffAccept::from_data(msg_data)),
-                        0x22 => Box::new(HandoffReject::from_data(msg_data)),
-                        0x23 => Box::new(GhostUpdate::from_data(msg_data)),
-                        0x24 => Box::new(HandoffComplete::from_data(msg_data)),
+                        HandoffRequest::tag() => Box::new(HandoffRequest::from_binary(msg_data)),
+                        HandoffAccept::tag() => Box::new(HandoffAccept::from_binary(msg_data)),
+                        HandoffReject::tag() => Box::new(HandoffReject::from_binary(msg_data)),
+                        GhostUpdate::tag() => Box::new(GhostUpdate::from_binary(msg_data)),
+                        HandoffComplete::tag() => Box::new(HandoffComplete::from_binary(msg_data)),
                         _ => {
                             println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
                             return;
@@ -61,11 +69,30 @@ pub fn receive_packets(
 
                 msg.resolve(&mut player_registry, &mut server_config, &socket, connection, stream);
             }
-
+            
+            GameNetworkEvent::Connected(connection ) => {
+                println!("Connected to broker with connection id : {}", connection.connection_id);
+            }
 
             _ => {
-                println!("WARNING : Event received does not match any expected event : {:?}", event);
+                println!("WARNING : Event received does not match any expected event : {:?}, from broker", event);
             }
+        }
+    }
+
+    //receive packet from orchestrator :
+    while let Ok(Some(event)) = socket.peer_orch.poll() {
+        match event {
+            GameNetworkEvent::Message { connection, stream, data } => {
+                println!("Received message from orchestrator, connection id : {}, stream id : {}, data length : {}", connection.connection_id, stream.stream_id, data.len());
+                //handle message from orchestrator
+            }
+            
+            GameNetworkEvent::Connected(connection ) => {
+                println!("Connected to orchestrator with connection id : {}", connection.connection_id);
+            }
+            _ => {
+                println!("WARNING : Event received does not match any expected event : {:?}, from orchestrator", event);
         }
     }
 }
@@ -125,4 +152,10 @@ pub fn send_ghost_update(
             );
         }
     }
+}
+
+pub fn publish(
+    registry: Res<PlayerRegistry>
+) {
+    
 }

@@ -1,7 +1,6 @@
 ﻿use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 use shared::*;
-use crate::message::{GhostUpdate, HandoffAccept, HandoffComplete, HandoffReject, HandoffRequest, InterShardMessage};
 
 #[derive(Resource)]
 pub struct ServerConfig {
@@ -65,7 +64,8 @@ impl ServerConfig {
 
 #[derive(Resource)]
 pub struct GameSocket {
-    pub peer: GamePeer,
+    pub peer_orch: GamePeer,
+    pub peer_broker: GamePeer,
 }
 
 #[derive(Resource)]
