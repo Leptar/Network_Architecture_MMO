@@ -6,7 +6,8 @@ members = [
     "orchestrator",
     "gatekeeper",
     "broker_pubsub",
-    "shared"
+    "shared",
+    "client",
     "SpatialServer"]
 
 [workspace.package]
@@ -31,5 +32,9 @@ thiserror = "2.0.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"]}
 
+bytes = "1.11.1"
+rand = "0.8.6"
+
 shared = {path = "./shared"}
 bytes = "1"
+

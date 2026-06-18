@@ -6,3 +6,5 @@ edition.workspace = true
 [dependencies]
 bevy.workspace = true
 shared.workspace = true
+game_sockets.workspace = true
+bytes = "1.11.1"
