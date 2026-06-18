@@ -59,6 +59,132 @@ impl QuadTree {
 
         result
     }
+
+    /// Génère un arbre complet à partir d'une zone initiale
+    pub fn generate(bounds: Rect, max_depth: u8) -> Self {
+        let mut next_id = 1; // On commence à assigner au Shard 1
+        Self::subdivide(bounds, 0, max_depth, &mut next_id)
+    }
+
+    /// division récursive interne
+    /// Méthode que j'utilise au startup
+    fn subdivide(bounds: Rect, depth: u8, max_depth: u8, next_id: &mut u32) -> Self {
+        // Condition d'arrêt : on a atteint la profondeur voulue
+        if depth == max_depth {
+            let current_id = *next_id;
+            *next_id += 1;
+            return QuadTree {
+                bounds,
+                depth,
+                max_depth,
+                children: None,
+                shard_id: Some(current_id),
+            };
+        }
+
+        let center = bounds.center();
+
+        let tl = Rect::from_corners(Vec2::new(bounds.min.x, center.y), Vec2::new(center.x, bounds.max.y));
+        let tr = Rect::from_corners(center, bounds.max);
+        let bl = Rect::from_corners(bounds.min, center);
+        let br = Rect::from_corners(Vec2::new(center.x, bounds.min.y), Vec2::new(bounds.max.x, center.y));
+
+        // Appel récursif
+        let children = Box::new([
+            Self::subdivide(tl, depth + 1, max_depth, next_id),
+            Self::subdivide(tr, depth + 1, max_depth, next_id),
+            Self::subdivide(bl, depth + 1, max_depth, next_id),
+            Self::subdivide(br, depth + 1, max_depth, next_id),
+        ]);
+
+        QuadTree {
+            bounds,
+            depth,
+            max_depth,
+            children: Some(children),
+            shard_id: None,
+        }
+    }
+
+    /// Tente de diviser un shard existant en 4 nouveaux shards.
+    /// Retourne la liste des nouveaux shards créés (ID et Zone) pour l'Orchestrator.
+    /// Methode que j'utilise au runtime si un shard doit être subdivisé
+    pub fn split_shard(&mut self, target_shard: u32, next_id: &mut u32) -> Option<Vec<(u32, Rect)>> {
+        // Cas de base : on a trouvé la feuille à diviser
+        if self.shard_id == Some(target_shard) {
+            // On vérifie la limite de profondeur pour éviter un arbre infini
+            if self.depth >= self.max_depth {
+                println!("Impossible de diviser le shard {} : profondeur maximale atteinte.", target_shard);
+                return None;
+            }
+
+            let center = self.bounds.center();
+            let b = self.bounds;
+
+            // Fonction utilitaire pour créer un enfant rapidement
+            let mut create_child = |rect| {
+                let id = *next_id;
+                *next_id += 1;
+                QuadTree {
+                    bounds: rect,
+                    depth: self.depth + 1,
+                    max_depth: self.max_depth,
+                    children: None,
+                    shard_id: Some(id),
+                }
+            };
+
+            // Création des 4 quadrants
+            let tl = create_child(Rect::from_corners(Vec2::new(b.min.x, center.y), Vec2::new(center.x, b.max.y)));
+            let tr = create_child(Rect::from_corners(center, b.max));
+            let bl = create_child(Rect::from_corners(b.min, center));
+            let br = create_child(Rect::from_corners(Vec2::new(center.x, b.min.y), Vec2::new(b.max.x, center.y)));
+
+            // L'ancien shard devient un noeud parent (il perd son autorité)
+            self.shard_id = None;
+            self.children = Some(Box::new([tl, tr, bl, br]));
+
+            // On retourne les infos des 4 nouveaux shards (pour prévenir l'Orchestrator)
+            if let Some(children) = &self.children {
+                let mut new_leaves = Vec::new();
+                for child in children.iter() {
+                    new_leaves.push((child.shard_id.unwrap(), child.bounds));
+                }
+                return Some(new_leaves);
+            }
+        }
+
+        // Appel récursif : si ce n'est pas cette feuille, on cherche dans les enfants
+        if let Some(children) = &mut self.children {
+            for child in children.iter_mut() {
+                if let Some(new_shards) = child.split_shard(target_shard, next_id) {
+                    return Some(new_shards); // On fait remonter le résultat
+                }
+            }
+        }
+
+        None // Shard non trouvé
+    }
+
+
+    /// Récupère la liste de tous les Shards générés (ID + Zone couverte)
+    pub fn get_leaves(&self) -> Vec<(u32, Rect)> {
+        let mut leaves = Vec::new();
+
+        // feuille = add
+        if let Some(id) = self.shard_id {
+            leaves.push((id, self.bounds));
+        }
+
+        // child = recursif
+        if let Some(children) = &self.children {
+            for child in children.iter() {
+                leaves.extend(child.get_leaves());
+            }
+        }
+
+        leaves
+    }
 }
 
 #[cfg(test)]
