@@ -1,20 +1,13 @@
 ﻿use bevy::prelude::*;
-use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent};
+use game_sockets::{GamePeer, protocols::QuicBackend, GameNetworkEvent};
 use crate::resources::{BrokerSocket, ClientRegistry, SubscriptionMap, ClientShardMap};
 
 pub fn bind_socket(mut commands: Commands) {
-    let peer = GamePeer::new(UdpBackend::new());
+    let peer = GamePeer::new(QuicBackend::new());
 
-    // Le broker écoute sur quel port ?
-    // Lire BROKER_PORT depuis les variables d'environnement
-    let port: u16 = std::env::var("BROKER_PORT")
-        .unwrap_or("9000".to_string())
-        .parse()
-        .expect("BROKER_PORT invalide");
-
-    peer.listen("0.0.0.0", port).unwrap();
+    peer.listen("0.0.0.0", shared::BROK_PORT).unwrap();
     commands.insert_resource(BrokerSocket { peer });
-    println!("Broker démarré sur le port {}", port);
+    println!("Broker démarré sur le port {}", shared::BROK_PORT);
 }
 
 pub fn receive_messages(
@@ -39,7 +32,6 @@ pub fn receive_messages(
                             .trim_matches('\0')
                             .to_string();
 
-                        // Enregistrer cette connexion comme étant ce shard
                         shard_map.shard_connections.insert(topic.clone(), connection);
 
                         println!("Shard '{}' enregistré", topic);
