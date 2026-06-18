@@ -39,6 +39,5 @@ pub const BROK_IP: &str = "127.0.0.1";
 pub const BROK_PORT: u16 = 8080;
 
 //------------ INFO CONNECTION ORCH   ------------//
-
 pub const ORCH_IP: &str = "127.0.0.1";
 pub const ORCH_PORT: u16 = 22555;
