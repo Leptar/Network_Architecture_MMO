@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/orchestrator/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/shared/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Broker_PubSub/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/client/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/SpatialServer/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
