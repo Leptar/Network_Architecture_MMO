@@ -1,0 +1,34 @@
+﻿# Stage 1 - Compilation
+FROM rust:1.87 AS builder
+
+WORKDIR /app
+
+# Copier tout le workspace
+COPY Cargo.toml Cargo.lock ./
+COPY dedicated_server/ ./dedicated_server/
+COPY shared/ ./shared/
+COPY orchestrator/ ./orchestrator/
+COPY gatekeeper/ ./gatekeeper/
+COPY Broker_PubSub/ ./Broker_PubSub/
+
+# Dépendances nécessaires pour game_sockets
+RUN apt-get update && apt-get install -y \
+    clang libclang-dev cmake \
+    libssl-dev libprotobuf-dev protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Compiler uniquement le broker
+RUN cargo build --release -p broker_pubsub
+
+# Stage 2 - Image finale
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    libprotobuf-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/broker_pubsub .
+
+CMD ["./broker_pubsub"]

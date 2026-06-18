@@ -1,0 +1,9 @@
+[package]
+name = "broker_pubsub"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy.workspace = true
+game_sockets.workspace = true
+bytes.workspace = true

@@ -5,6 +5,7 @@ members = [
     "dedicated_server",
     "orchestrator",
     "gatekeeper",
+    "broker_pubsub",
     "shared",
     "client",
     "SpatialServer"]
@@ -35,4 +36,5 @@ bytes = "1.11.1"
 rand = "0.8.6"
 
 shared = {path = "./shared"}
+bytes = "1"
 
