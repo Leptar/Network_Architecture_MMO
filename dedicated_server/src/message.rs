@@ -85,7 +85,7 @@ impl HandoffRequest {
         }
     }
 
-    pub fn from_data(data: &[u8]) -> Self {
+    pub fn from_binary(data: &[u8]) -> Self {
         //format entity_id: u32, pos: Vec2, vel: Vec2, state: [u8; 64]
         HandoffRequest {
             entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
@@ -135,7 +135,7 @@ impl HandoffAccept {
         }
     }
 
-    pub fn from_data(data: &[u8]) -> Self {
+    pub fn from_binary(data: &[u8]) -> Self {
         //format entity_id: u32
         HandoffAccept {
             entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
@@ -181,7 +181,7 @@ impl HandoffReject {
         }
     }
 
-    pub fn from_data(data: &[u8]) -> Self {
+    pub fn from_binary(data: &[u8]) -> Self {
         //format entity_id: u32, reason: String (rest of the data)
         HandoffReject {
             entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
@@ -227,7 +227,7 @@ impl HandoffComplete {
         }
     }
 
-    pub fn from_data(data: &[u8]) -> Self {
+    pub fn from_binary(data: &[u8]) -> Self {
         //format entity_id: u32
         HandoffComplete {
             entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
@@ -275,7 +275,7 @@ impl GhostUpdate {
         }
     }
 
-    pub fn from_data(data: &[u8]) -> Self {
+    pub fn from_binary(data: &[u8]) -> Self {
         //format entity_id: u32, pos: Vec2, vel: Vec2
         GhostUpdate {
             entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
