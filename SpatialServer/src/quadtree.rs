@@ -1,0 +1,107 @@
+﻿use bevy::prelude::*;
+
+#[derive(Resource)]
+pub struct QuadTree {
+    pub bounds: Rect,
+    pub depth: u8,
+    pub max_depth: u8,
+    pub children: Option<Box<[QuadTree; 4]>>,
+    pub shard_id: Option<u32>,
+}
+
+impl QuadTree {
+    /// Retourne le shard_id de la feuille contenant `pos`.
+    pub fn shard_for(&self, pos: Vec2) -> Option<u32> {
+        if !self.bounds.contains(pos) {
+            return None;
+        }
+
+        // recursif
+        if let Some(children) = &self.children {
+            for child in children.iter() {
+                if let Some(id) = child.shard_for(pos) {
+                    return Some(id);
+                }
+            }
+        }
+
+        self.shard_id
+    }
+
+    /// Retourne les shard_ids distincts dans un rayon `margin` autour de `pos`.
+    pub fn shards_near(&self, pos: Vec2, margin: f32) -> Vec<u32> {
+        let mut result = Vec::new();
+
+        // point le plus proche du rect
+        let closest_x = pos.x.clamp(self.bounds.min.x, self.bounds.max.x);
+        let closest_y = pos.y.clamp(self.bounds.min.y, self.bounds.max.y);
+
+        // verifie si il touche la marge
+        let distance_squared = Vec2::new(closest_x, closest_y).distance_squared(pos);
+        if distance_squared > margin * margin {
+            return result;
+        }
+
+        // touche la marge
+        if let Some(children) = &self.children {
+            for child in children.iter() {
+                result.extend(child.shards_near(pos, margin));
+            }
+        }
+        // si une feuille, on push l'id
+        else if let Some(id) = self.shard_id {
+            result.push(id);
+        }
+
+        // check le shard de pas l'avoir 2 fois
+        result.sort();
+        result.dedup();
+
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper pour créer un arbre de test très simple (100x100 divisé en 4)
+    fn create_test_tree() -> QuadTree {
+        QuadTree {
+            bounds: Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0)),
+            depth: 0,
+            max_depth: 1,
+            shard_id: None,
+            children: Some(Box::new([
+                // Enfant 0 : Top-Left (Shard 1)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(0.0, 50.0), Vec2::new(50.0, 100.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(1) },
+                // Enfant 1 : Top-Right (Shard 2)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(50.0, 50.0), Vec2::new(100.0, 100.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(2) },
+                // Enfant 2 : Bottom-Left (Shard 3)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(3) },
+                // Enfant 3 : Bottom-Right (Shard 4)
+                QuadTree { bounds: Rect::from_corners(Vec2::new(50.0, 0.0), Vec2::new(100.0, 50.0)), depth: 1, max_depth: 1, children: None, shard_id: Some(4) },
+            ])),
+        }
+    }
+
+    #[test]
+    fn test_shard_for_resolves_correctly() {
+        let tree = create_test_tree();
+        // Vérification stricte : le point (25, 75) doit être dans le Shard 1
+        assert_eq!(tree.shard_for(Vec2::new(25.0, 75.0)), Some(1));
+        // Le point (75, 25) doit être dans le Shard 4
+        assert_eq!(tree.shard_for(Vec2::new(75.0, 25.0)), Some(4));
+    }
+
+    #[test]
+    fn test_shards_near_detects_boundaries() {
+        let tree = create_test_tree();
+        // Un joueur en (48, 50) avec une marge de 5.0 chevauche la ligne verticale du milieu (x=50)
+        let near = tree.shards_near(Vec2::new(48.0, 75.0), 5.0);
+        // Il devrait détecter les shards 1 et 2
+        assert!(near.contains(&1));
+        assert!(near.contains(&2));
+        assert_eq!(near.len(), 2);
+    }
+}

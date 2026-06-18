@@ -6,8 +6,8 @@ members = [
     "orchestrator",
     "gatekeeper",
     "shared",
-    "client"
-]
+    "client",
+    "SpatialServer"]
 
 [workspace.package]
 version = "0.1.0"
@@ -35,3 +35,4 @@ bytes = "1.11.1"
 rand = "0.8.6"
 
 shared = {path = "./shared"}
+
