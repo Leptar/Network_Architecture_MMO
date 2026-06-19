@@ -3,6 +3,16 @@
 version = 4
 
 [[package]]
+name = "Broker_PubSub"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bytes",
+ "game_sockets",
+ "shared",
+]
+
+[[package]]
 name = "SpatialServer"
 version = "0.1.0"
 dependencies = [
@@ -552,16 +562,6 @@ name = "bitflags"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
-
-[[package]]
-name = "broker_pubsub"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bytes",
- "game_sockets",
- "shared",
-]
 
 [[package]]
 name = "bumpalo"
@@ -2196,11 +2196,14 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orchestrator"
 version = "0.1.0"
 dependencies = [
+ "bevy",
+ "game_sockets",
  "redis",
  "serde",
  "serde_json",
  "shared",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -3025,7 +3028,7 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde_json",
+ "uuid",
 ]
 
 [[package]]

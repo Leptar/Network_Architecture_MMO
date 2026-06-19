@@ -1,4 +1,5 @@
 use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub enum ServerStatus{
@@ -6,15 +7,24 @@ pub enum ServerStatus{
     Full,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+pub enum ServerState{
+    WarmUp,
+    Idle,
+    Running,
+    Stopping,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Heartbeat {
-    pub id: String,
+    pub id: Uuid,
     pub ip: String,
     pub port: u16,
     pub zone: String,
     pub player_count: usize,
     pub max_players: usize,
     pub status: ServerStatus,
+    pub state: ServerState,
 }
 
 //------------ Client Message Receive/Send ------------//
@@ -45,6 +55,8 @@ pub const ORCH_PORT: u16 = 22555;
 pub const PAYLOAD_CROSSING_ALERT: u8 = 0x99;
 
 pub const PAYLOAD_BOOT_SHARD: u8 = 0x90;
+
+//------------------------------------------------//
 
 #[derive(Debug, Clone)]
 pub struct CrossingAlertData {

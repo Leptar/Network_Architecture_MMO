@@ -1,28 +1,41 @@
 ﻿use bevy::prelude::*;
-use game_sockets::{GamePeer, protocols::UdpBackend, GameNetworkEvent};
+use game_sockets::{GamePeer, GameNetworkEvent, GameStreamReliability};
+use game_sockets::protocols::QuicBackend;
 use crate::resources::*;
 use crate::entities::*;
 use crate::message::*;
 use shared::*;
+use std::net::ToSocketAddrs;
 
 pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
-    // Se connecter à l'orchestrateur
-    let peer_orch = GamePeer::new(UdpBackend::new());
-    peer_orch.listen("0.0.0.0", config.port).unwrap();
-    
-    let parts: Vec<&str> = config.orchestrator_addr.split(':').collect();
-    let orch_ip = parts[0];
-    let orch_port: u16 = parts[1].parse().unwrap();
-    peer_orch.connect(orch_ip, orch_port).unwrap();
-    
-    //connecte au broker
-    let peer_broker = GamePeer::new(UdpBackend::new());
-    peer_broker.listen("0.0.0.0", config.port).unwrap();
-    
-    peer_orch.connect(BROK_IP, BROK_PORT).unwrap();
+    // Démarre 1 socket qui vas avoir plusieurs connection (0: Orchestrator, 1:Broker)
+    let peer = GamePeer::new(QuicBackend::new());
+    peer.listen("0.0.0.0", config.port).unwrap();
 
-    commands.insert_resource(GameSocket { peer_orch, peer_broker });
-    println!("Serveur démarré sur le port {}", config.port);
+    //Connection to Orchestrator
+    let resolved_addr_orch = format!("{}:{}", &config.orchestrator_ip, config.orchestrator_port)
+        .to_socket_addrs()
+        .expect("Failed to resolve address")
+        .next()
+        .expect("No address found");
+
+    peer.connect(&resolved_addr_orch.ip().to_string(), resolved_addr_orch.port()).unwrap();
+
+    println!("Attempting to connect to Orchestrator on {}:{}...", resolved_addr_orch.ip(), resolved_addr_orch.port());
+
+    //Connection to Broker
+    let resolved_addr_brok = format!("{}:{}", &config.broker_ip, config.broker_port)
+        .to_socket_addrs()
+        .expect("Failed to resolve address")
+        .next()
+        .expect("No address found");
+    peer.connect(&resolved_addr_brok.ip().to_string(), resolved_addr_brok.port()).unwrap();
+
+    println!("Attempting to connect to Broker on {}:{}...", resolved_addr_brok.ip(), resolved_addr_brok.port());
+
+
+    commands.insert_resource(GameSocket { peer, connection_orch: None, stream_orch: None, connection_broker: None, stream_broker: None });
+    println!("Game socket initialized and listening on port {}", config.port);
 }
 
 pub fn receive_packets(
@@ -31,7 +44,7 @@ pub fn receive_packets(
     mut server_config: ResMut<ServerConfig>
 ) {
     //receive packet from broker :
-    while let Ok(Some(event)) = socket.peer_broker.poll() {
+    while let Ok(Some(event)) = socket.peer.poll() {
         match event {
             GameNetworkEvent::Message { connection, stream, data } => {
                 if data.is_empty() {
@@ -39,60 +52,99 @@ pub fn receive_packets(
                     continue;
                 }
 
-                let msg_tag: u8 = data[0];
-                let msg_data = &data[1..];
-                let mut msg: Box<dyn InterShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
-                    match msg_tag {
-                        HandoffRequest::tag() => Box::new(HandoffRequest::from_json(json)),
-                        HandoffAccept::tag() => Box::new(HandoffAccept::from_json(json)),
-                        HandoffReject::tag() => Box::new(HandoffReject::from_json(json)),
-                        GhostUpdate::tag() => Box::new(GhostUpdate::from_json(json)),
-                        HandoffComplete::tag() => Box::new(HandoffComplete::from_json(json)),
-                        _ => {
-                            println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
-                            return;
-                        },
+                //Message de Orchestrator
+                if let Some(orch_conn) = &socket.connection_orch {
+                    if (connection.connection_id == orch_conn.connection_id) {
+                        let msg_tag: u8 = data[0];
+                        let msg_data = &data[1..];
+                        
+                        let mut msg: Box<dyn InterShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
+                            match msg_tag {
+                                HandoffRequest::TAG => Box::new(HandoffRequest::from_json(json)),
+                                HandoffAccept::TAG => Box::new(HandoffAccept::from_json(json)),
+                                HandoffReject::TAG => Box::new(HandoffReject::from_json(json)),
+                                GhostUpdate::TAG => Box::new(GhostUpdate::from_json(json)),
+                                HandoffComplete::TAG => Box::new(HandoffComplete::from_json(json)),
+                                _ => {
+                                    println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                                    return;
+                                },
+                            }
+                        } else {
+                            match msg_tag {
+                                HandoffRequest::TAG => Box::new(HandoffRequest::from_binary(msg_data)),
+                                HandoffAccept::TAG => Box::new(HandoffAccept::from_binary(msg_data)),
+                                HandoffReject::TAG => Box::new(HandoffReject::from_binary(msg_data)),
+                                GhostUpdate::TAG => Box::new(GhostUpdate::from_binary(msg_data)),
+                                HandoffComplete::TAG => Box::new(HandoffComplete::from_binary(msg_data)),
+                                _ => {
+                                    println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                                    return;
+                                },
+                            }
+                        };
+                        
+                        msg.resolve(&mut player_registry, &mut server_config, &socket, connection, stream.clone());
+                    }
+                }
+
+                //Message du Broker
+                if let Some(broker_conn) = &socket.connection_broker {
+                    if (connection.connection_id == broker_conn.connection_id) {
+                        println!("Received message from Orchestrator with connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data);
+
+                        //TODO: handle message area to own
+                        server_config.state = ServerState::Running;
                     }
                 } else {
-                    match msg_tag {
-                        HandoffRequest::tag() => Box::new(HandoffRequest::from_binary(msg_data)),
-                        HandoffAccept::tag() => Box::new(HandoffAccept::from_binary(msg_data)),
-                        HandoffReject::tag() => Box::new(HandoffReject::from_binary(msg_data)),
-                        GhostUpdate::tag() => Box::new(GhostUpdate::from_binary(msg_data)),
-                        HandoffComplete::tag() => Box::new(HandoffComplete::from_binary(msg_data)),
-                        _ => {
-                            println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
-                            return;
-                        },
+                    println!("WARNING : Orchestrator connection not established yet, received message from connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data);
+                }
+            }
+
+            GameNetworkEvent::Connected(connection ) => {
+                if(socket.connection_orch == None) {
+                    println!("Connected to Orchestrator with connection id : {}", connection.connection_id);
+                    socket.connection_orch = Some(connection);
+
+                    //Creation du stream de communication avec l'orchestrator
+                    socket.peer.create_stream(connection, GameStreamReliability::Reliable).unwrap();
+                } else if(socket.connection_broker == None) {
+                    println!("Connected to Broker with connection id : {}", connection.connection_id);
+                    socket.connection_broker = Some(connection);
+
+                    //Creation du stream de communication avec le broker
+                    socket.peer.create_stream(connection, GameStreamReliability::Unreliable).unwrap();
+                }
+            }
+
+            GameNetworkEvent::StreamCreated(connection, stream) => {
+                //Stream de Orchestrator
+                if let Some(orch_conn) = &socket.connection_orch {
+                    if (connection.connection_id == orch_conn.connection_id) {
+                        socket.stream_orch = Some(stream.clone());
+                        println!("Stream created with Orchestrator, connection id : {}, stream id : {}", connection.connection_id, stream.stream_id);
                     }
-                };
+                } else {
+                    println!("WARNING : Orchestrator connection not established yet, received message from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
+                }
+                
+                //Stream du Broker
+                if let Some(broker_conn) = &socket.connection_broker {
+                    if (connection.connection_id == broker_conn.connection_id) {
+                        socket.stream_broker = Some(stream.clone());
+                        println!("Stream created with Broker, connection id : {}, stream id : {}", connection.connection_id, stream.stream_id);
 
-                msg.resolve(&mut player_registry, &mut server_config, &socket, connection, stream);
-            }
-            
-            GameNetworkEvent::Connected(connection ) => {
-                println!("Connected to broker with connection id : {}", connection.connection_id);
+                        //Allumer et connecter à tout le monde passage en idle
+                        server_config.state = ServerState::Idle;
+                    }
+                } else {
+                    println!("WARNING : Broker connection not established yet, received message from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
+                }
             }
 
             _ => {
-                println!("WARNING : Event received does not match any expected event : {:?}, from broker", event);
+                println!("WARNING : Event received does not match any expected event : {:?}", event);
             }
-        }
-    }
-
-    //receive packet from orchestrator :
-    while let Ok(Some(event)) = socket.peer_orch.poll() {
-        match event {
-            GameNetworkEvent::Message { connection, stream, data } => {
-                println!("Received message from orchestrator, connection id : {}, stream id : {}, data length : {}", connection.connection_id, stream.stream_id, data.len());
-                //handle message from orchestrator
-            }
-            
-            GameNetworkEvent::Connected(connection ) => {
-                println!("Connected to orchestrator with connection id : {}", connection.connection_id);
-            }
-            _ => {
-                println!("WARNING : Event received does not match any expected event : {:?}, from orchestrator", event);
         }
     }
 }
@@ -120,22 +172,25 @@ pub fn send_heartbeat(
         player_count: registry.players.len(),
         max_players: config.max_players,
         status: config.status,
+        state: config.state,
     };
 
     let json = serde_json::to_string(&heartbeat).unwrap();
     //println!("Envoi heartbeat : {}", json);
 
-    let udp_socket = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
-    udp_socket.send_to(json.as_bytes(), &config.orchestrator_addr).unwrap();
+    send_inter_orchestrator_packet(
+        &socket,
+        json.as_bytes(),
+    );
     //println!("Heartbeat envoyé !");
 }
 
 pub fn send_ghost_update(
-    mut socket: Res<GameSocket>,
+    socket: Res<GameSocket>,
     registry: Res<PlayerRegistry>,
 ) {
     for player in registry.players.values() {
-        if let EntityAuthority::PendingHandoff { target_shard } = &player.authority {
+        if let EntityAuthority::PendingHandoff = &player.authority {
             let ghost_update = GhostUpdate {
                 entity_id: player.id,
                 pos: player.position,
@@ -145,17 +200,15 @@ pub fn send_ghost_update(
             let msg = Box::new(ghost_update);
 
             send_inter_shards_packet(
-                &socket.peer,
+                &socket,
                 msg,
-                &target_shard.connection,
-                &target_shard.stream,
             );
         }
     }
 }
 
 pub fn publish(
-    registry: Res<PlayerRegistry>
+    registry: Res<PlayerRegistry>,
 ) {
-    
+    //println!("--- Player Registry ---");
 }

@@ -5,7 +5,7 @@ members = [
     "dedicated_server",
     "orchestrator",
     "gatekeeper",
-    "broker_pubsub",
+    "Broker_PubSub",
     "shared",
     "client",
     "SpatialServer"]

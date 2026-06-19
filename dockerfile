@@ -9,6 +9,9 @@ COPY dedicated_server/ ./dedicated_server/
 COPY shared/ ./shared/
 COPY orchestrator/ ./orchestrator/
 COPY gatekeeper/ ./gatekeeper/
+COPY client/ ./client/
+COPY SpatialServer/ ./SpatialServer/
+COPY Broker_PubSub/ ./Broker_PubSub/
 
 # Installer les dépendances nécessaires pour la compilation
 RUN apt-get update && apt-get install -y clang libclang-dev cmake protobuf-compiler \
