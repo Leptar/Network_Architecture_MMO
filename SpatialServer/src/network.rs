@@ -54,7 +54,7 @@ pub fn receive_position_updates(
                     let y = f32::from_le_bytes([rest[8], rest[9], rest[10], rest[11]]);
                     let nouvelle_position = Vec2::new(x, y);
 
-                    let mut joueur_trouve = false;
+                    let joueur_trouve = false;
 
                     if let Some(&entity) = player_entities.map.get(&client_id) {
                         if let Ok(mut pos) = query.get_mut(entity) {
@@ -84,7 +84,7 @@ pub(crate) fn flush_network_messages(
     mut unsub_reader: MessageReader<UnsubscribeMessage>,
     mut alert_reader: MessageReader<CrossingAlertMessage>,
     mut boot_reader: MessageReader<BootShardMessage>,
-    mut socket: ResMut<SpatialSocket>,
+    socket: ResMut<SpatialSocket>,
 ) {
     // Par défaut, stream 0 pour les messages fiables
     let stream = GameStream::from(0u16);
