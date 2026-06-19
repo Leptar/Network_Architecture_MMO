@@ -19,42 +19,53 @@ fn receive_packet(mut peer: Arc<Mutex<GamePeer>>) {
 
                     let msg_tag : u8 = data[0];
                     let msg_data = &data[1..];
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
-                        match msg_tag {
-                            0x00 =>{//TODO: mettre le bon tag de msg pour avoir mon client ID
-                                let client_id = CLIENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                println!("Received client ID : {}, from connection id : {}, with stream id : {}", client_id, connection.connection_id, stream.stream_id);
-                            },
-                            0x04 => { //Format du Broadcast: payload_len: u16, payload: [u8]
-                                if msg_data.len() < 2 {
-                                    println!("Received invalid Broadcast message (too short) from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
-                                    continue;
-                                }
-                                let payload_len = u16::from_be_bytes([msg_data[0], msg_data[1]]) as usize;
-                                if msg_data.len() < 2 + payload_len {
-                                    println!("Received invalid Broadcast message (payload length mismatch) from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
-                                    continue;
-                                }
-                                let payload = &msg_data[2..2+payload_len];
-                                println!("Received Broadcast message with payload length : {}, payload : {:?}, from connection id : {}, with stream id : {}", payload_len, payload, connection.connection_id, stream.stream_id);
-                            }
-                            _ => {
-                                println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                    match msg_tag {
+                        0x06 => {
+                            if msg_data.len() < 4 { continue; }
+                            let client_id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
+                            CLIENT_ID.store(client_id, std::sync::atomic::Ordering::Relaxed);
+                            println!("Mon client_id : {}", client_id);
+                        },
+                        0x04 => { //Format du Broadcast: payload_len: u16, payload: [u8]
+                            if msg_data.len() < 2 {
+                                println!("Received invalid Broadcast message (too short) from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
                                 continue;
-                            },
+                            }
+                            let payload_len = u16::from_le_bytes([msg_data[0], msg_data[1]]) as usize;
+                            if msg_data.len() < 2 + payload_len {
+                                println!("Received invalid Broadcast message (payload length mismatch) from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
+                                continue;
+                            }
+                            let payload = &msg_data[2..2+payload_len];
+                            println!("Received Broadcast message with payload length : {}, payload : {:?}, from connection id : {}, with stream id : {}", payload_len, payload, connection.connection_id, stream.stream_id);
                         }
+                        _ => {
+                            println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                            continue;
+                        },
                     }
                 },
                 GameNetworkEvent::Connected(connection) => {
+                    // 1. On garde la connexion pour `send_input`
                     BROKER_CONNECTION.lock().unwrap().replace(connection.clone());
-                    println!("New connection established with id : {}", connection.connection_id);
+                    println!("Connecté au broker (id : {})", connection.connection_id);
+
+                    // 2. On envoie immédiatement le 0x07 pour s'identifier
+                    let stream = GameStream::from(0u16);
+                    let data = vec![0x07u8];
+                    peer.lock().unwrap().send(
+                        &connection,
+                        &stream,
+                        bytes::Bytes::from(data)
+                    ).ok();
+
+                    println!("Identification envoyée au broker");
                 },
+
                 GameNetworkEvent::Disconnected(connection) => {
                     println!("Connection disconnected with id : {}", connection.connection_id);
                 }
-                _ => {
-                    println!("WARNING : Event received does not match any expected event : {:?}", event);
-                },
+                _ => {}
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -87,8 +98,10 @@ fn send_input(mut peer: Arc<Mutex<GamePeer>>) {
         };
 
         let msg_data = serde_json::to_vec(&msg).unwrap();
-        let mut data = vec![0x05];
-        data.extend_from_slice(&msg_data);
+        let mut data = Vec::new();
+        data.push(0x05);
+        data.extend_from_slice(&client_id.to_le_bytes());
+        data.extend_from_slice(&*INPUT_BUFFER.lock().unwrap());
 
         if let (Some(connection), Some(stream)) = (connection, stream) {
             peer.lock().unwrap().send(&connection, &stream, bytes::Bytes::from(data));
@@ -110,13 +123,10 @@ fn add_input_in_buffer(input: u8) {
 
 #[tokio::main]
 async fn main() {
-    let broker_addr = "127.0.0.1";
-    let broker_port = 9000;
-
     let peer = Arc::new(std::sync::Mutex::new(GamePeer::new(UdpBackend::new())));
     let peer2 = peer.clone();
 
-    peer.lock().unwrap().connect(broker_addr, broker_port).expect("Failed to connect to broker");
+    peer.lock().unwrap().connect(BROK_IP, BROK_PORT).expect("Failed to connect to broker");
 
     std::thread::spawn(move || receive_packet(peer));
     std::thread::spawn(move || send_input(peer2));

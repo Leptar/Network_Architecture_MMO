@@ -115,7 +115,6 @@ pub fn receive_messages(
                         let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
                         let input = &rest[4..20];
 
-                        // Trouver le shard du client
                         if let Some(topic) = shard_map.map.get(&client_id) {
                             if let Some(shard_conn) = shard_map.shard_connections.get(topic) {
 
@@ -135,6 +134,25 @@ pub fn receive_messages(
                                 println!("Input client {} relayé au shard '{}'", client_id, topic);
                             }
                         }
+                    }
+                    0x07 => {
+                        // Le client se déclare
+                        let client_id = clients.next_id;
+                        clients.next_id += 1;
+                        clients.clients.insert(client_id, connection);
+
+                        let stream_resp = game_sockets::GameStream::from(0u16);
+                        let mut response = Vec::new();
+                        response.push(0x06u8);
+                        response.extend_from_slice(&client_id.to_le_bytes());
+
+                        let _ = socket.peer.send(
+                            &connection,
+                            &stream_resp,
+                            bytes::Bytes::from(response)
+                        );
+
+                        println!("Client identifié, id assigné : {}", client_id);
                     }
                     _ => { println!("Tag inconnu : {:#x}", tag); }
                 }
