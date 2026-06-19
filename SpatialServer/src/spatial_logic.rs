@@ -1,7 +1,7 @@
 ﻿use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use crate::components::{CurrentShard, Position, ClientId, NearbyShards};
-use crate::messages::{BootShardEvent, CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
+use crate::messages::{BootShardMessage, CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::quadtree::QuadTree;
 
 pub(crate) fn check_shard_transitions(
@@ -60,7 +60,7 @@ const MAX_PLAYERS_PER_SHARD: usize = 1000;
 pub fn monitor_shard_capacity(
     mut quad_tree: ResMut<QuadTree>,
     query: Query<&CurrentShard>,
-    mut boot_evts: MessageWriter<BootShardEvent>,
+    mut boot_evts: MessageWriter<BootShardMessage>,
 ) {
     // dictionnaire pour faire le décompte
     let mut shard_counts: HashMap<u32, usize> = HashMap::new();
@@ -89,7 +89,7 @@ pub fn monitor_shard_capacity(
                 for (new_id, bounds) in new_shards {
                     println!("Shard {} -> Zone: {:?}", new_id, bounds);
 
-                    boot_evts.write(BootShardEvent {
+                    boot_evts.write(BootShardMessage {
                         shard_id: new_id,
                         bounds,
                     });

@@ -4,7 +4,7 @@ use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Po
 use bytes::Bytes;
 use game_sockets::protocols::UdpBackend;
 use crate::messages::*;
-use shared::PAYLOAD_CROSSING_ALERT;
+use shared::{PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT};
 
 pub fn connect_to_broker(mut commands: Commands) {
 
@@ -88,6 +88,7 @@ pub(crate) fn flush_network_messages(
     mut sub_reader: MessageReader<SubscribeMessage>,
     mut unsub_reader: MessageReader<UnsubscribeMessage>,
     mut alert_reader: MessageReader<CrossingAlertMessage>,
+    mut boot_reader: MessageReader<BootShardMessage>,
     mut socket: ResMut<SpatialSocket>,
 ) {
     // Par défaut, stream 0 pour les messages fiables
@@ -132,7 +133,7 @@ pub(crate) fn flush_network_messages(
             println!("[RÉSEAU] Envoi Unsubscribe ({} octets) pour le client {}", len, unsub.client_id);
         }
 
-        // Tag 0x03
+        // Tag 0x99 (Crossing)
         for alert in alert_reader.read() {
             let mut buffer = Vec::new();
             buffer.push(0x03); // Tag Publish
@@ -163,6 +164,43 @@ pub(crate) fn flush_network_messages(
             let len = buffer.len();
             let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
             println!("[RÉSEAU] Envoi CrossingAlert vers {} ({} octets)", topic_str, len);
+        }
+        
+        for boot in boot_reader.read() {
+            let mut buffer = Vec::new();
+            buffer.push(0x03);
+
+            // Topic ciblé : Le salon d'administration de l'Orchestrateur
+            let mut topic_bytes = [0u8; 32];
+            let topic_str = "admin:orchestrator";
+            let bytes = topic_str.as_bytes();
+            let len = bytes.len().min(32);
+            topic_bytes[..len].copy_from_slice(&bytes[..len]);
+            buffer.extend_from_slice(&topic_bytes);
+
+            // Construction du Payload interne
+            let mut payload = Vec::new();
+
+            // Constante 0x90 
+            payload.push(PAYLOAD_BOOT_SHARD);
+
+            // L'ID du shard à démarrer
+            payload.extend_from_slice(&boot.shard_id.to_le_bytes());
+
+            // Les coordonnées de la zone 
+            payload.extend_from_slice(&boot.bounds.min.x.to_le_bytes());
+            payload.extend_from_slice(&boot.bounds.min.y.to_le_bytes());
+            payload.extend_from_slice(&boot.bounds.max.x.to_le_bytes());
+            payload.extend_from_slice(&boot.bounds.max.y.to_le_bytes());
+            
+            let payload_len = payload.len() as u16;
+            buffer.extend_from_slice(&payload_len.to_le_bytes());
+            buffer.extend_from_slice(&payload);
+
+            // Envoi via la socket
+            let len = buffer.len();
+            let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
+            println!("[RÉSEAU] Envoi Ordre de Boot (0x90) à l'Orchestrateur pour Shard {} ({} octets)", boot.shard_id, len);
         }
     }
 

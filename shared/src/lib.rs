@@ -44,6 +44,8 @@ pub const ORCH_PORT: u16 = 22555;
 
 pub const PAYLOAD_CROSSING_ALERT: u8 = 0x99;
 
+pub const PAYLOAD_BOOT_SHARD: u8 = 0x90;
+
 #[derive(Debug, Clone)]
 pub struct CrossingAlertData {
     pub client_id: u32,

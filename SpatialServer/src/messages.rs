@@ -20,7 +20,7 @@ pub struct CrossingAlertMessage {
 }
 
 #[derive(Message, Debug)]
-pub struct BootShardEvent {
+pub struct BootShardMessage {
     pub shard_id: u32,
     pub bounds: Rect,
 }
