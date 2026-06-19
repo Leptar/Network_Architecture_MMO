@@ -158,22 +158,7 @@ pub fn receive_messages(
                 }
             }
             GameNetworkEvent::Connected(conn) => {
-                let stream = game_sockets::GameStream::from(0u16);
-                let client_id = clients.next_id;
-                clients.next_id += 1;
-                clients.clients.insert(client_id, conn);
-
-                let mut response = Vec::new();
-                response.push(0x06u8);
-                response.extend_from_slice(&client_id.to_le_bytes());
-
-                let _ = socket.peer.send(
-                    &conn,
-                    &stream,
-                    bytes::Bytes::from(response)
-                );
-
-                println!("Nouveau client connecté, id assigné : {}", client_id);
+                println!("Nouvelle connexion ({}), en attente du tag d'identification...", conn.connection_id);
             }
             _ => {}
         }
