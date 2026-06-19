@@ -8,3 +8,4 @@ bevy.workspace = true
 game_sockets.workspace = true
 bytes.workspace = true
 shared.workspace = true
+uuid.workspace = true

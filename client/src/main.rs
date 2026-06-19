@@ -1,136 +1,162 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicU32;
-use game_sockets::*;
-use game_sockets::protocols::*;
+use bevy::prelude::*;
+use game_sockets::{GamePeer, protocols::QuicBackend, GameNetworkEvent, GameConnection, GameStream, GameStreamReliability};
 use shared::*;
 
-static CLIENT_ID: AtomicU32 = AtomicU32::new(0);
-static BROKER_CONNECTION: Mutex<Option<GameConnection>> = Mutex::new(None);
-static BROKER_STREAM: Mutex<Option<GameStream>> = Mutex::new(None);
+#[derive(Resource)]
+struct ClientId(u32);
 
-static INPUT_BUFFER: Mutex<[u8; 16]> = Mutex::new([0; 16]);
+impl Default for ClientId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
 
-fn receive_packet(mut peer: Arc<Mutex<GamePeer>>) {
-    loop {
-        while let Ok(Some(event)) = peer.lock().unwrap().poll() {
-            match event {
-                GameNetworkEvent::Message { connection, stream, data } => {
-                    println!("Received message from connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data);
+#[derive(Resource)]
+struct ClientSocket {
+    peer: GamePeer,
+    broker_connection: Option<GameConnection>,
+    broker_stream: Option<GameStream>,
+}
 
-                    let msg_tag : u8 = data[0];
-                    let msg_data = &data[1..];
-                    match msg_tag {
-                        0x06 => {
-                            if msg_data.len() < 4 { continue; }
-                            let client_id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
-                            CLIENT_ID.store(client_id, std::sync::atomic::Ordering::Relaxed);
-                            println!("Mon client_id : {}", client_id);
-                        },
-                        0x04 => { //Format du Broadcast: payload_len: u16, payload: [u8]
-                            if msg_data.len() < 2 {
-                                println!("Received invalid Broadcast message (too short) from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
-                                continue;
-                            }
-                            let payload_len = u16::from_le_bytes([msg_data[0], msg_data[1]]) as usize;
-                            if msg_data.len() < 2 + payload_len {
-                                println!("Received invalid Broadcast message (payload length mismatch) from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id);
-                                continue;
-                            }
-                            let payload = &msg_data[2..2+payload_len];
-                            println!("Received Broadcast message with payload length : {}, payload : {:?}, from connection id : {}, with stream id : {}", payload_len, payload, connection.connection_id, stream.stream_id);
-                        }
-                        _ => {
-                            println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+#[derive(Resource)]
+struct InputBuffer([u8; 16]);
+
+impl Default for InputBuffer {
+    fn default() -> Self {
+        Self([0; 16])
+    }
+}
+
+#[derive(Resource)]
+struct InputTimer(Timer);
+
+impl Default for InputTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(0.1, TimerMode::Repeating))
+    }
+}
+
+fn bind_socket(mut commands: Commands) {
+    let peer = GamePeer::new(QuicBackend::new());
+    peer.connect(BROK_IP, BROK_PORT).expect("Failed to connect to broker");
+
+    commands.insert_resource(ClientSocket {
+        peer,
+        broker_connection: None,
+        broker_stream: None,
+    });
+
+    println!("Connexion au broker en cours...");
+}
+
+fn receive_packet(
+    mut socket: ResMut<ClientSocket>,
+    mut client_id: ResMut<ClientId>,
+) {
+    while let Ok(Some(event)) = socket.peer.poll() {
+        match event {
+            GameNetworkEvent::Message { connection, stream, data } => {
+                println!("Received message from connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data);
+
+                let msg_tag: u8 = data[0];
+                let msg_data = &data[1..];
+                match msg_tag {
+                    0x06 => {
+                        if msg_data.len() < 4 { continue; }
+                        let id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
+                        client_id.0 = id;
+                        println!("Mon client_id : {}", id);
+                    },
+                    0x04 => {
+                        if msg_data.len() < 2 {
+                            println!("Received invalid Broadcast message (too short)");
                             continue;
-                        },
+                        }
+                        let payload_len = u16::from_le_bytes([msg_data[0], msg_data[1]]) as usize;
+                        if msg_data.len() < 2 + payload_len {
+                            println!("Received invalid Broadcast message (payload length mismatch)");
+                            continue;
+                        }
+                        let payload = &msg_data[2..2 + payload_len];
+                        println!("Received Broadcast message with payload length : {}, payload : {:?}", payload_len, payload);
                     }
-                },
-                GameNetworkEvent::Connected(connection) => {
-                    // 1. On garde la connexion pour `send_input`
-                    BROKER_CONNECTION.lock().unwrap().replace(connection.clone());
-                    println!("Connecté au broker (id : {})", connection.connection_id);
-
-                    // 2. On envoie immédiatement le 0x07 pour s'identifier
-                    let stream = GameStream::from(0u16);
-                    let data = vec![0x07u8];
-                    peer.lock().unwrap().send(
-                        &connection,
-                        &stream,
-                        bytes::Bytes::from(data)
-                    ).ok();
-
-                    println!("Identification envoyée au broker");
-                },
-
-                GameNetworkEvent::Disconnected(connection) => {
-                    println!("Connection disconnected with id : {}", connection.connection_id);
+                    _ => {
+                        println!("Received message with unknown tag : {}", msg_tag);
+                    },
                 }
-                _ => {}
+            },
+
+            GameNetworkEvent::Connected(connection) => {
+                socket.broker_connection = Some(connection);
+                println!("Connecté au broker (id : {})", connection.connection_id);
+
+                match socket.peer.create_stream(connection, GameStreamReliability::Reliable) {
+                    Ok(_) => println!("Creation du stream de communication avec le broker"),
+                    Err(e) => println!("Erreur create_stream: {:?}", e),
+                }
+            },
+
+            GameNetworkEvent::StreamCreated(connection, stream) => {
+                socket.broker_stream = Some(stream.clone());
+                println!("Stream créé avec le broker, stream id : {}", stream.stream_id);
+
+                let data = vec![0x07];
+                let _ = socket.peer.send(&connection, &stream, bytes::Bytes::from(data));
+                println!("Identification envoyée au broker");
+            },
+
+            GameNetworkEvent::Disconnected(connection) => {
+                println!("Connection disconnected with id : {}", connection.connection_id);
             }
+            _ => {}
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 
-fn send_input(mut peer: Arc<Mutex<GamePeer>>) {
-    let client_id = CLIENT_ID.load(std::sync::atomic::Ordering::Relaxed);
-
-    if BROKER_STREAM.lock().unwrap().is_none() {
-        BROKER_STREAM.lock().unwrap().replace(GameStream::from(0));
+fn send_input(
+    mut socket: ResMut<ClientSocket>,
+    client_id: Res<ClientId>,
+    mut input_buffer: ResMut<InputBuffer>,
+    mut timer: ResMut<InputTimer>,
+    time: Res<Time>,
+) {
+    timer.0.tick(time.delta());
+    if !timer.0.just_finished() {
+        return;
     }
 
+    add_input_in_buffer(
+        &mut input_buffer.0,
+        (if rand::random::<bool>() { INPUT_LEFT } else { 0 })
+            | (if rand::random::<bool>() { INPUT_RIGHT } else { 0 })
+            | (if rand::random::<bool>() { INPUT_UP } else { 0 })
+            | (if rand::random::<bool>() { INPUT_DOWN } else { 0 }),
+    );
 
-    loop {
-        let connection = BROKER_CONNECTION.lock().unwrap().clone();
-        let stream = BROKER_STREAM.lock().unwrap().clone();
+    let mut data = Vec::new();
+    data.push(0x05);
+    data.extend_from_slice(&client_id.0.to_le_bytes());
+    data.extend_from_slice(&input_buffer.0);
 
-        //ajoute une fausse input dans le buffer en ajoutant aléatoirement INPUT_...
-        add_input_in_buffer(
-            (if rand::random::<bool>() { INPUT_LEFT } else { 0 })
-                | (if rand::random::<bool>() { INPUT_RIGHT } else { 0 })
-                | (if rand::random::<bool>() { INPUT_UP } else { 0 })
-                | (if rand::random::<bool>() { INPUT_DOWN } else { 0 })
-        );
-
-        let msg = ClientInput {
-            client_id,
-            input: INPUT_BUFFER.lock().unwrap().clone(),
-        };
-
-        let msg_data = serde_json::to_vec(&msg).unwrap();
-        let mut data = Vec::new();
-        data.push(0x05);
-        data.extend_from_slice(&client_id.to_le_bytes());
-        data.extend_from_slice(&*INPUT_BUFFER.lock().unwrap());
-
-        if let (Some(connection), Some(stream)) = (connection, stream) {
-            peer.lock().unwrap().send(&connection, &stream, bytes::Bytes::from(data));
-        }
-
-        let rand_time = rand::random::<u64>() % 100 + 50; // Envoie des données d'entrée toutes les 50 à 150ms
-        std::thread::sleep(std::time::Duration::from_millis(rand_time));
+    if let (Some(connection), Some(stream)) = (&socket.broker_connection, &socket.broker_stream) {
+        let _ = socket.peer.send(connection, stream, bytes::Bytes::from(data));
     }
 }
 
-fn add_input_in_buffer(input: u8) {
-    let mut buffer = INPUT_BUFFER.lock().unwrap();
+fn add_input_in_buffer(buffer: &mut [u8; 16], input: u8) {
     for i in (1..buffer.len()).rev() {
         buffer[i] = buffer[i - 1];
     }
-    
     buffer[0] = input;
 }
 
-#[tokio::main]
-async fn main() {
-    let peer = Arc::new(std::sync::Mutex::new(GamePeer::new(UdpBackend::new())));
-    let peer2 = peer.clone();
-
-    peer.lock().unwrap().connect(BROK_IP, BROK_PORT).expect("Failed to connect to broker");
-
-    std::thread::spawn(move || receive_packet(peer));
-    std::thread::spawn(move || send_input(peer2));
-
-    tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-    println!("Shutting down client...");
+fn main() {
+    App::new()
+        .add_plugins(MinimalPlugins)
+        .init_resource::<ClientId>()
+        .init_resource::<InputBuffer>()
+        .init_resource::<InputTimer>()
+        .add_systems(Startup, bind_socket)
+        .add_systems(Update, (receive_packet, send_input).chain())
+        .run();
 }

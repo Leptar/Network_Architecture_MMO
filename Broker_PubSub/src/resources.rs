@@ -1,6 +1,13 @@
 ﻿use bevy::prelude::*;
-use game_sockets::{GamePeer, GameConnection};
+use game_sockets::{GamePeer, GameConnection, GameStream};
+use uuid::Uuid;
 use std::collections::HashMap;
+
+#[derive(Clone)]
+pub struct DGSNetworkInfo{
+    pub connection_dgs: Option<GameConnection>,
+    pub stream_dgs: Option<GameStream>,
+}
 
 #[derive(Resource)]
 pub struct BrokerSocket {
@@ -11,7 +18,7 @@ pub struct BrokerSocket {
 pub struct ClientRegistry {
     pub clients: HashMap<u32, GameConnection>, // client_id → connexion
     pub next_id: u32,                          // compteur auto-incrémenté
-    pub shards: HashMap<String, GameConnection>,
+    pub shards: HashMap<Uuid, DGSNetworkInfo>,
 }
 
 #[derive(Resource, Default)]

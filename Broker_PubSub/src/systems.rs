@@ -111,24 +111,19 @@ pub fn receive_messages(
                     }
                     0x05 => {
                         if rest.len() < 20 { continue; } // 4 (client_id) + 16 (input)
+                        
+                        println!("Input reçu ({} bytes)", rest.len());
 
                         let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
-                        let input = &rest[4..20];
 
                         if let Some(topic) = shard_map.map.get(&client_id) {
                             if let Some(shard_conn) = shard_map.shard_connections.get(topic) {
-
-                                // Reconstruire le message pour le shard
-                                let mut msg = Vec::new();
-                                msg.push(0x05u8);
-                                msg.extend_from_slice(&client_id.to_le_bytes());
-                                msg.extend_from_slice(input);
 
                                 let stream = game_sockets::GameStream::from(0u16);
                                 let _ = socket.peer.send(
                                     shard_conn,
                                     &stream,
-                                    bytes::Bytes::from(msg)
+                                    bytes::Bytes::from(data)
                                 );
 
                                 println!("Input client {} relayé au shard '{}'", client_id, topic);
@@ -141,14 +136,13 @@ pub fn receive_messages(
                         clients.next_id += 1;
                         clients.clients.insert(client_id, connection);
 
-                        let stream_resp = game_sockets::GameStream::from(0u16);
                         let mut response = Vec::new();
                         response.push(0x06u8);
                         response.extend_from_slice(&client_id.to_le_bytes());
 
                         let _ = socket.peer.send(
                             &connection,
-                            &stream_resp,
+                            &stream,
                             bytes::Bytes::from(response)
                         );
 

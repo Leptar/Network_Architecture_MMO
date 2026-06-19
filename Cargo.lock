@@ -10,6 +10,7 @@ dependencies = [
  "bytes",
  "game_sockets",
  "shared",
+ "uuid",
 ]
 
 [[package]]
@@ -687,6 +688,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 name = "client"
 version = "0.1.0"
 dependencies = [
+ "bevy",
  "bytes",
  "game_sockets",
  "rand 0.8.6",
