@@ -9,7 +9,7 @@ use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use std::time::Duration;
 use bevy::platform::collections::HashMap;
 use crate::components::PlayerEntities;
-use crate::messages::{CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
+use crate::messages::{BootShardEvent, CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::quadtree::QuadTree;
 
 fn main() {
@@ -22,6 +22,7 @@ fn main() {
         .add_message::<SubscribeMessage>()
         .add_message::<UnsubscribeMessage>()
         .add_message::<CrossingAlertMessage>()
+        .add_message::<BootShardEvent>()
         .init_resource::<PlayerEntities>()
         .add_systems(Startup, (
             network::connect_to_broker, // On lance la connexion réseau

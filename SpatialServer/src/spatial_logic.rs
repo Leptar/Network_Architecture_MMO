@@ -1,7 +1,7 @@
 ﻿use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use crate::components::{CurrentShard, Position, ClientId, NearbyShards};
-use crate::messages::{CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
+use crate::messages::{BootShardEvent, CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::quadtree::QuadTree;
 
 pub(crate) fn check_shard_transitions(
@@ -60,8 +60,7 @@ const MAX_PLAYERS_PER_SHARD: usize = 1000;
 pub fn monitor_shard_capacity(
     mut quad_tree: ResMut<QuadTree>,
     query: Query<&CurrentShard>,
-    // A voir comment je recupere le next id
-    // mut id_generator: ResMut<ShardIdGenerator>,
+    mut boot_evts: MessageWriter<BootShardEvent>,
 ) {
     // dictionnaire pour faire le décompte
     let mut shard_counts: HashMap<u32, usize> = HashMap::new();
@@ -88,10 +87,12 @@ pub fn monitor_shard_capacity(
             if let Some(new_shards) = quad_tree.split_shard(shard_id, &mut next_available_id) {
                 println!("QuadTree mis à jour. Nouveaux Shards à lancer :");
                 for (new_id, bounds) in new_shards {
-                    println!("  ➡️ Shard {} -> Zone: {:?}", new_id, bounds);
+                    println!("Shard {} -> Zone: {:?}", new_id, bounds);
 
-                    // TODO: Pousser un événement Bevy (ex: BootShardEvent)
-                    // qui sera lu par un système réseau pour avertir l'Orchestrator.
+                    boot_evts.write(BootShardEvent {
+                        shard_id: new_id,
+                        bounds,
+                    });
                 }
             }
         }

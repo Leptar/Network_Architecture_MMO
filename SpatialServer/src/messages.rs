@@ -18,3 +18,9 @@ pub struct CrossingAlertMessage {
     pub source_shard: u32,
     pub involved_shards: Vec<u32>,
 }
+
+#[derive(Message, Debug)]
+pub struct BootShardEvent {
+    pub shard_id: u32,
+    pub bounds: Rect,
+}
