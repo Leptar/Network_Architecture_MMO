@@ -4,20 +4,15 @@ use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Po
 use bytes::Bytes;
 use game_sockets::protocols::UdpBackend;
 use crate::messages::*;
-use shared::{PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT};
+use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT};
 
 pub fn connect_to_broker(mut commands: Commands) {
 
     let peer = GamePeer::new(UdpBackend::new());
 
-    // TODO : Définir l'adresse du Broker a contacter
-    let broker_address = "127.0.0.1";
-    let broker_port = 9000;
-
-    println!("Tentative de connexion au Broker sur {}...", broker_address);
-
+    println!("Tentative de connexion au Broker sur {}...", BROK_IP);
     // Tenter la connexion
-    match peer.connect(broker_address, broker_port) {
+    match peer.connect(BROK_IP, BROK_PORT) {
         Ok(_) => {
             println!("Service Spatial connecté avec succès au Broker !");
             // On insère notre ressource globale dans l'ECS
@@ -165,7 +160,7 @@ pub(crate) fn flush_network_messages(
             let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
             println!("[RÉSEAU] Envoi CrossingAlert vers {} ({} octets)", topic_str, len);
         }
-        
+
         for boot in boot_reader.read() {
             let mut buffer = Vec::new();
             buffer.push(0x03);
@@ -181,18 +176,18 @@ pub(crate) fn flush_network_messages(
             // Construction du Payload interne
             let mut payload = Vec::new();
 
-            // Constante 0x90 
+            // Constante 0x90
             payload.push(PAYLOAD_BOOT_SHARD);
 
             // L'ID du shard à démarrer
             payload.extend_from_slice(&boot.shard_id.to_le_bytes());
 
-            // Les coordonnées de la zone 
+            // Les coordonnées de la zone
             payload.extend_from_slice(&boot.bounds.min.x.to_le_bytes());
             payload.extend_from_slice(&boot.bounds.min.y.to_le_bytes());
             payload.extend_from_slice(&boot.bounds.max.x.to_le_bytes());
             payload.extend_from_slice(&boot.bounds.max.y.to_le_bytes());
-            
+
             let payload_len = payload.len() as u16;
             buffer.extend_from_slice(&payload_len.to_le_bytes());
             buffer.extend_from_slice(&payload);
