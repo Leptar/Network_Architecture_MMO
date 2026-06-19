@@ -3,17 +3,10 @@ use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 
 #[derive(Debug)]
-pub struct OtherShardConnectionInfo{
-    pub peer : GamePeer,
-    pub connection: GameConnection,
-    pub stream: GameStream,
-}
-
-#[derive(Debug)]
 pub enum EntityAuthority {
     Owned,
-    PendingHandoff { target_shard: OtherShardConnectionInfo },
-    Ghost { source_shard: OtherShardConnectionInfo },
+    PendingHandoff,
+    Ghost,
 }
 
 /*************************************/

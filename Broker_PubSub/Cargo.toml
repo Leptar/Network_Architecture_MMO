@@ -1,5 +1,5 @@
 [package]
-name = "broker_pubsub"
+name = "Broker_PubSub"
 version.workspace = true
 edition.workspace = true
 

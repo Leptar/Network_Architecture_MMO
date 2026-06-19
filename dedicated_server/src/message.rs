@@ -6,8 +6,8 @@ use crate::resources::*;
 
 pub trait  InterShardMessage {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream);
-    fn tag(&self) -> u8;
     fn to_json(&self) -> serde_json::Value;
+    fn tag(&self) -> u8;
 }
 
 //---------------------------------- HandoffRequest ----------------------------------//
@@ -26,10 +26,7 @@ impl InterShardMessage for HandoffRequest {
         if server_config.status == ServerStatus::Available {
             let new_ghost_player = PlayerEntity{
                 id: self.entity_id,
-                authority: EntityAuthority::Ghost { source_shard : OtherShardConnectionInfo {
-                    connection,
-                    stream,
-                }},
+                authority: EntityAuthority::Ghost,
                 position: self.pos,
                 rotation: 0.0,
                 velocity: self.vel,
@@ -45,9 +42,8 @@ impl InterShardMessage for HandoffRequest {
             };
 
             if let Some(player) = registry.players.get(&self.entity_id) {
-                if let EntityAuthority::Ghost { source_shard } = &player.authority {
-                    send_inter_shards_packet(&socket.peer, Box::new(accept_msg), &source_shard.connection, &source_shard.stream);
-                }
+                println!("Handoff request accepted for entity {}, player entity created with Ghost authority. Sending HandoffAccept message.", self.entity_id);
+                send_inter_shards_packet(&socket, Box::new(accept_msg));
             }
 
         } else {
@@ -57,12 +53,8 @@ impl InterShardMessage for HandoffRequest {
                 reason: "Server is full".to_string(),
             };
 
-            send_inter_shards_packet(&socket.peer, Box::new(reject_msg), &connection, &stream);
+            send_inter_shards_packet(&socket, Box::new(reject_msg));
         }
-    }
-
-    fn tag(&self) -> u8 {
-        0x20
     }
 
     fn to_json(&self) -> serde_json::Value {
@@ -73,9 +65,15 @@ impl InterShardMessage for HandoffRequest {
             "state": String::from_utf8_lossy(&self.state),
         })
     }
+
+    fn tag(&self) -> u8 {
+        Self::TAG
+    }
 }
 
 impl HandoffRequest {
+    pub const TAG: u8 = 0x20;
+
     pub fn from_json(json: serde_json::Value) -> Self {
         HandoffRequest {
             entity_id: json["entity_id"].as_u64().unwrap() as u32,
@@ -117,18 +115,20 @@ impl InterShardMessage for HandoffAccept {
         }
     }
 
-    fn tag(&self) -> u8 {
-        0x21
-    }
-
     fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "entity_id": self.entity_id,
         })
     }
+
+    fn tag(&self) -> u8 {
+        Self::TAG
+    }
 }
 
 impl HandoffAccept {
+    pub const TAG: u8 = 0x21;
+
     pub fn from_json(json: serde_json::Value) -> Self {
         HandoffAccept {
             entity_id: json["entity_id"].as_u64().unwrap() as u32,
@@ -151,6 +151,7 @@ pub struct HandoffReject{
 }
 
 impl InterShardMessage for HandoffReject {
+    
     fn resolve(&mut self, registry: &mut PlayerRegistry, _server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::PendingHandoff { .. } = &player.authority {
@@ -161,19 +162,21 @@ impl InterShardMessage for HandoffReject {
         }
     }
 
-    fn tag(&self) -> u8 {
-        0x22
-    }
-
     fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "entity_id": self.entity_id,
             "reason": self.reason,
         })
     }
+
+    fn tag(&self) -> u8 {
+        Self::TAG
+    }
 }
 
 impl HandoffReject {
+    pub const TAG: u8 = 0x22;
+
     pub fn from_json(json: serde_json::Value) -> Self {
         HandoffReject {
             entity_id: json["entity_id"].as_u64().unwrap() as u32,
@@ -197,6 +200,7 @@ pub struct HandoffComplete{
 }
 
 impl InterShardMessage for HandoffComplete {
+    
     fn resolve(&mut self, registry: &mut PlayerRegistry, _server_config: &mut ServerConfig, _socket: &GameSocket, _connection: GameConnection, _stream: GameStream) {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::Ghost { .. } = &player.authority {
@@ -209,18 +213,20 @@ impl InterShardMessage for HandoffComplete {
         }
     }
 
-    fn tag(&self) -> u8 {
-        0x24
-    }
-
     fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "entity_id": self.entity_id,
         })
     }
+
+    fn tag(&self) -> u8 {
+        Self::TAG
+    }
 }
 
 impl HandoffComplete {
+    pub const TAG: u8 = 0x24;
+
     pub fn from_json(json: serde_json::Value) -> Self {
         HandoffComplete {
             entity_id: json["entity_id"].as_u64().unwrap() as u32,
@@ -253,10 +259,6 @@ impl InterShardMessage for GhostUpdate {
         }
     }
 
-    fn tag(&self) -> u8 {
-        0x23
-    }
-
     fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "entity_id": self.entity_id,
@@ -264,9 +266,15 @@ impl InterShardMessage for GhostUpdate {
             "vel": {"x": self.vel.x, "y": self.vel.y},
         })
     }
+
+    fn tag(&self) -> u8 {
+        Self::TAG
+    }
 }
 
 impl GhostUpdate {
+    pub const TAG: u8 = 0x23;
+
     pub fn from_json(json: serde_json::Value) -> Self {
         GhostUpdate {
             entity_id: json["entity_id"].as_u64().unwrap() as u32,
@@ -294,19 +302,34 @@ impl GhostUpdate {
 //---------------------------------- Fonction ----------------------------------//
 
 pub fn send_inter_shards_packet(
-    socket: &GamePeer,
+    mut socket: &GameSocket,
     msg: Box<dyn InterShardMessage>,
-    connection: &GameConnection,
-    stream: &GameStream,
 ) {
     let json = msg.to_json().to_string();
     let mut data = vec![0u8; 1 + json.len()];
     data[0] = msg.tag();
     data[1..].copy_from_slice(json.as_bytes());
 
-    let result = socket.send(connection, stream, bytes::Bytes::from(data));
+    if let (Some(conn), Some(stream)) = (&socket.connection_orch, &socket.stream_orch) {
+        let result = socket.peer.send(conn, stream, bytes::Bytes::from(data));
+        if result.is_err() {
+            println!("Failed to send inter-shard message. Error: {:?}", result.err());
+        }
+    } else {
+        println!("WARNING : Broker connection or stream not established yet");
+    }
+}
 
-    if result.is_err() {
-        println!("Failed to send inter-shard message. Error: {:?}", result.err());
+pub fn send_inter_orchestrator_packet(
+    mut socket: &GameSocket,
+    data: &[u8],
+) {
+    if let (Some(conn), Some(stream)) = (&socket.connection_orch, &socket.stream_orch) {
+        let result = socket.peer.send(conn, stream, bytes::Bytes::from(data.to_vec()));
+        if result.is_err() {
+            println!("Failed to send inter-orchestrator message. Error: {:?}", result.err());
+        }
+    } else {
+        println!("WARNING : Orchestrator connection or stream not established yet");
     }
 }
