@@ -4,6 +4,7 @@ use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Po
 use bytes::Bytes;
 use game_sockets::protocols::UdpBackend;
 use crate::messages::*;
+use shared::PAYLOAD_CROSSING_ALERT;
 
 pub fn connect_to_broker(mut commands: Commands) {
 
@@ -138,7 +139,7 @@ pub(crate) fn flush_network_messages(
 
             // Topic ciblé : l'ancien shard (le Shard Source)
             let mut topic_bytes = [0u8; 32];
-            let topic_str = format!("shard:{}", alert.source_shard);
+            let topic_str = format!("admin:shard:{}", alert.source_shard);
             let bytes = topic_str.as_bytes();
             let len = bytes.len().min(32);
             topic_bytes[..len].copy_from_slice(&bytes[..len]);
@@ -146,7 +147,7 @@ pub(crate) fn flush_network_messages(
 
             // Construction du Payload interne (Custom)
             let mut payload = Vec::new();
-            payload.push(0x99); // Tag CrossingAlert (arbitraire, A valider avec vous)
+            payload.push(PAYLOAD_CROSSING_ALERT); // Tag CrossingAlert
             payload.extend_from_slice(&alert.client_id.to_le_bytes());
             payload.push(alert.involved_shards.len() as u8);
             for &shard_id in &alert.involved_shards {
