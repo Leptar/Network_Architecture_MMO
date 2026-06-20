@@ -67,6 +67,11 @@ pub const PAYLOAD_BOOT_SHARD: u8 = 0x90;
 
 //------------------------------------------------//
 
+//------------ TAGS DE ROUTAGE BROKER (L'Enveloppe) ------------//
+pub const TAG_ADMIN_CONNECT: u8 = 0x0A;       // Pour que l'Orch/Spatial s'identifie
+pub const TAG_ADMIN_ROUTE_SEND: u8 = 0x0B;    // Pour envoyer un msg direct dans le tunnel
+pub const TAG_ADMIN_ROUTE_RECEIVE: u8 = 0x0C; // Le Broker délivre le msg direct
+
 #[derive(Debug, Clone)]
 pub struct CrossingAlertData {
     pub client_id: u32,

@@ -1,6 +1,7 @@
 ﻿use bevy::prelude::*;
 use game_sockets::{GamePeer, protocols::QuicBackend, GameNetworkEvent};
-use crate::resources::{BrokerSocket, ClientRegistry, SubscriptionMap, ClientShardMap};
+use shared::{TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_RECEIVE, TAG_ADMIN_ROUTE_SEND};
+use crate::resources::{BrokerSocket, ClientRegistry, SubscriptionMap, ClientShardMap, AdminRegistry};
 
 pub fn bind_socket(mut commands: Commands) {
     let peer = GamePeer::new(QuicBackend::new());
@@ -14,7 +15,8 @@ pub fn receive_messages(
     mut socket: ResMut<BrokerSocket>,
     mut clients: ResMut<ClientRegistry>,
     mut subs: ResMut<SubscriptionMap>,
-    mut shard_map: ResMut<ClientShardMap>
+    mut shard_map: ResMut<ClientShardMap>,
+    mut admin_registry: ResMut<AdminRegistry>
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
         match event {
@@ -151,6 +153,38 @@ pub fn receive_messages(
                     0x51 => {
                         //TODO: REGARDE DANS LIB LE MSG CLIENTINIT et envoyer au bon shard les donner de connection (tu sais que c'est un client car c'est un msg utiliser seulement par eux)
                     }
+
+                    TAG_ADMIN_CONNECT => {
+                        if rest.len() < 32 { continue; }
+                        // Le serveur envoie son nom. le lit et l'ajoute à la liste des services.
+                        let admin_name = String::from_utf8_lossy(&rest[0..32]).trim_matches('\0').to_string();
+                        admin_registry.admins.insert(admin_name.clone(), connection);
+                        println!("🛡️ Serveur d'infrastructure connecté : {}", admin_name);
+                    }
+
+                    // Un service demande à envoyer un message privé à un autre
+                    TAG_ADMIN_ROUTE_SEND => {
+                        if rest.len() < 34 { continue; }
+
+                        let target_name = String::from_utf8_lossy(&rest[0..32]).trim_matches('\0').to_string();
+                        let payload_len = u16::from_le_bytes([rest[32], rest[33]]) as usize;
+
+                        if rest.len() < 34 + payload_len { continue; }
+                        let payload = &rest[34..34 + payload_len];
+
+                        // Si la cible est bien dans notre liste
+                        if let Some(target_conn) = admin_registry.admins.get(&target_name) {
+                            let mut direct_msg = Vec::with_capacity(1 + payload_len);
+
+                            // On emballe le message avec l'étiquette de réception (0x0C)
+                            direct_msg.push(TAG_ADMIN_ROUTE_RECEIVE);
+                            direct_msg.extend_from_slice(payload);
+
+                            // Et on l'envoie directement, sans passer par les abonnements des joueurs !
+                            let _ = socket.peer.send(target_conn, &stream, bytes::Bytes::from(direct_msg));
+                        }
+                    }
+
                     _ => { println!("Tag inconnu : {:#x}", tag); }
                 }
             }

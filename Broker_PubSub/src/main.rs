@@ -5,10 +5,12 @@ use bevy::prelude::*;
 use resources::ClientRegistry;
 use resources::SubscriptionMap;
 use resources::ClientShardMap;
+use crate::resources::AdminRegistry;
 
 fn main() {
     App::new()
         .add_plugins(MinimalPlugins)
+        .init_resource::<AdminRegistry>()
         .init_resource::<ClientRegistry>()
         .init_resource::<SubscriptionMap>()
         .init_resource::<ClientShardMap>()

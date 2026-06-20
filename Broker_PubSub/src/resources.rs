@@ -31,3 +31,8 @@ pub struct ClientShardMap {
     pub map: HashMap<u32, String>,              // client_id → topic shard
     pub shard_connections: HashMap<String, GameConnection>, // topic → connexion shard
 }
+
+#[derive(Resource, Default)]
+pub struct AdminRegistry {
+    pub admins: HashMap<String, GameConnection>, // ex: "orchestrator" -> Connexion
+}
