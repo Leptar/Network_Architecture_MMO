@@ -145,15 +145,15 @@ pub(crate) fn flush_network_messages(
         // Tag 0x99 (Crossing)
         for alert in alert_reader.read() {
             let mut buffer = Vec::new();
-            buffer.push(0x03); // Tag Publish
+            buffer.push(TAG_ADMIN_ROUTE_SEND); // Tag Publish
 
-            // Topic ciblé : l'ancien shard (le Shard Source)
-            let mut topic_bytes = [0u8; 32];
-            let topic_str = format!("admin:shard:{}", alert.source_shard);
-            let bytes = topic_str.as_bytes();
+            // target : dgs source
+            let mut target_bytes = [0u8; 32];
+            let target_str = format!("shard:{}", alert.source_shard);
+            let bytes = target_str.as_bytes();
             let len = bytes.len().min(32);
-            topic_bytes[..len].copy_from_slice(&bytes[..len]);
-            buffer.extend_from_slice(&topic_bytes);
+            target_bytes[..len].copy_from_slice(&bytes[..len]);
+            buffer.extend_from_slice(&target_bytes);
 
             // Construction du Payload interne (Custom)
             let mut payload = Vec::new();
@@ -172,7 +172,7 @@ pub(crate) fn flush_network_messages(
             // Envoi via la socket
             let len = buffer.len();
             let _ = socket.peer.send(conn, &stream, Bytes::from(buffer));
-            println!("[RÉSEAU] Envoi CrossingAlert vers {} ({} octets)", topic_str, len);
+            println!("[RÉSEAU] Envoi CrossingAlert vers {} ({} octets)", target_str, len);
         }
 
         for boot in boot_reader.read() {
