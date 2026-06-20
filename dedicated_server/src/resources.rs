@@ -12,6 +12,10 @@ pub struct ServerConfig {
     pub max_players: usize,
     pub status: ServerStatus,
     pub state: ServerState,
+    pub min_x: f32,
+    pub max_x: f32,
+    pub min_y: f32,
+    pub max_y: f32,
     pub orchestrator_ip: String,
     pub orchestrator_port: u16,
     pub broker_ip: String,
@@ -62,6 +66,11 @@ impl ServerConfig {
             .parse::<u16>()
             .expect("BROK_PORT doit être un nombre valide");
         
+        let min_x = -1.0; 
+        let max_x = -1.0; 
+        let min_y = -1.0;
+        let max_y = -1.0;
+        
         Self {
             id,
             ip,
@@ -70,6 +79,10 @@ impl ServerConfig {
             max_players,
             status,
             state,
+            min_x,
+            max_x,
+            min_y,
+            max_y,
             orchestrator_ip,
             orchestrator_port,
             broker_ip,

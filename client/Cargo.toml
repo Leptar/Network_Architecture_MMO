@@ -12,3 +12,4 @@ serde_json.workspace = true
 bytes.workspace = true
 rand.workspace = true
 bevy.workspace = true
+bincode = "1.3"

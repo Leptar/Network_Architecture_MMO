@@ -24,7 +24,17 @@ pub struct PlayerEntity {
 
 impl PlayerEntity {
     pub fn interpret_player_input(&mut self, input: [u8; 16]) {
-        //TODO : TRAITEMENT DES INPUT
+        //prend le premier input de la liste et l'applique au pos du joueur
+            let direction = input[0];
+            let speed = 5.0; // Vitesse de déplacement du joueur
+            
+            match direction {
+                0 => self.position.y += speed, // Haut
+                1 => self.position.y -= speed, // Bas
+                2 => self.position.x -= speed, // Gauche
+                3 => self.position.x += speed, // Droite
+                _ => (), // Aucun mouvement
+            }
     }
 }
 
@@ -37,6 +47,14 @@ impl Default for PlayerRegistry {
     fn default() -> Self {
         PlayerRegistry {
             players: HashMap::new(),
+        }
+    }
+}
+
+impl PlayerRegistry {
+    pub fn update_player_input(&mut self, client_id: u32, input: [u8; 16]) {
+        if let Some(player) = self.players.get_mut(&client_id) {
+            player.interpret_player_input(input);
         }
     }
 }

@@ -77,6 +77,31 @@ pub fn receive_packets(
                                 HandoffReject::TAG => Box::new(HandoffReject::from_binary(msg_data)),
                                 GhostUpdate::TAG => Box::new(GhostUpdate::from_binary(msg_data)),
                                 HandoffComplete::TAG => Box::new(HandoffComplete::from_binary(msg_data)),
+                                0x55 => {
+                                    //format min_x min_y max_x max_y en float32
+                                    println!("Receive my working zone");
+
+                                    if msg_data.len() != 16 {
+                                        println!("Invalid working zone data length : {}, expected 16", msg_data.len());
+                                        return;
+                                    }
+
+                                    let min_x = f32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
+                                    let min_y = f32::from_le_bytes([msg_data[4], msg_data[5], msg_data[6], msg_data[7]]);
+                                    let max_x = f32::from_le_bytes([msg_data[8], msg_data[9], msg_data[10], msg_data[11]]);
+                                    let max_y = f32::from_le_bytes([msg_data[12], msg_data[13], msg_data[14], msg_data[15]]);
+                                    println!("Working zone received : min_x : {}, min_y : {}, max_x : {}, max_y : {}", min_x, min_y, max_x, max_y);
+
+                                    server_config.min_x = min_x;
+                                    server_config.min_y = min_y;
+                                    server_config.max_x = max_x;
+                                    server_config.max_y = max_y;
+
+                                    server_config.state = ServerState::Running;
+                                    println!("Server state set to Running");
+
+                                    return;
+                                },
                                 _ => {
                                     println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
                                     return;
@@ -91,10 +116,24 @@ pub fn receive_packets(
                 //Message du Broker
                 if let Some(broker_conn) = &socket.connection_broker {
                     if (connection.connection_id == broker_conn.connection_id) {
-                        println!("Received message from Orchestrator with connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data);
+                        let msg_tag: u8 = data[0];
+                        let msg_data = &data[1..];
 
-                        //TODO: handle message area to own
-                        server_config.state = ServerState::Running;
+                        match msg_tag {
+                            0x05 => {
+                                //Traitement des input player, format : InputClient de shared
+                                if let Ok(input) = serde_json::from_slice::<ClientInput>(msg_data) {
+                                    println!("Received input from client_id : {}, sequence_id : {}, input : {:?}", input.client_id, input.sequence_id, input.input);
+                                    player_registry.update_player_input(input.client_id, input.input);
+                                } else {
+                                    println!("Received invalid client input message");
+                                }
+                            }
+
+                            _ => {
+                                println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}, data : {:?}", msg_tag, connection.connection_id, stream.stream_id, msg_data);
+                            }
+                        }
                     }
                 } else {
                     println!("WARNING : Orchestrator connection not established yet, received message from connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data);

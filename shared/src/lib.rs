@@ -36,6 +36,7 @@ pub const INPUT_DOWN:  u8 = 0b00001000; // bit 3
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientInput {
     pub client_id: u32,
+    pub sequence_id: u32,
     pub input: [u8; 16]
 }
 

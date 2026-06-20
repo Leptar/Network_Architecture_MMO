@@ -1,6 +1,8 @@
+use std::sync::atomic::AtomicUsize;
 use bevy::prelude::*;
 use game_sockets::{GamePeer, protocols::QuicBackend, GameNetworkEvent, GameConnection, GameStream, GameStreamReliability};
 use shared::*;
+use bincode::*;
 
 #[derive(Resource)]
 struct ClientId(u32);
@@ -35,6 +37,9 @@ impl Default for InputTimer {
         Self(Timer::from_seconds(0.1, TimerMode::Repeating))
     }
 }
+
+
+static INPUT_ID: AtomicUsize = AtomicUsize::new(0);
 
 fn bind_socket(mut commands: Commands) {
     let peer = GamePeer::new(QuicBackend::new());
@@ -133,10 +138,15 @@ fn send_input(
             | (if rand::random::<bool>() { INPUT_DOWN } else { 0 }),
     );
 
-    let mut data = Vec::new();
-    data.push(0x05);
-    data.extend_from_slice(&client_id.0.to_le_bytes());
-    data.extend_from_slice(&input_buffer.0);
+    let mut input_packet: ClientInput = ClientInput {
+        client_id: client_id.0,
+        sequence_id: INPUT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst) as u32,
+        input: input_buffer.0,
+    };
+
+    let serialized = bincode::serialize(&input_packet).expect("Failed to serialize ClientInput");
+    let mut data = vec![0x05];
+    data.extend_from_slice(&serialized);
 
     if let (Some(connection), Some(stream)) = (&socket.broker_connection, &socket.broker_stream) {
         let _ = socket.peer.send(connection, stream, bytes::Bytes::from(data));
