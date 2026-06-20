@@ -146,7 +146,10 @@ pub fn receive_messages(
                             bytes::Bytes::from(response)
                         );
 
-                        println!("Client identifié, id assigné : {}", client_id);
+                        println!("Client identifié, id assigné : {}", client_id); //TODO: retiré identification (ID client = ID CONNECTION (car elle est unique))
+                    }
+                    0x51 => {
+                        //TODO: REGARDE DANS LIB LE MSG CLIENTINIT et envoyer au bon shard les donner de connection (tu sais que c'est un client car c'est un msg utiliser seulement par eux)
                     }
                     _ => { println!("Tag inconnu : {:#x}", tag); }
                 }
