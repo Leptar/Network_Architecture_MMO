@@ -4,7 +4,7 @@ use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Po
 use bytes::Bytes;
 use game_sockets::protocols::UdpBackend;
 use crate::messages::*;
-use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT};
+use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT, TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_SEND};
 
 pub fn connect_to_broker(mut commands: Commands) {
 
@@ -38,6 +38,20 @@ pub fn receive_position_updates(
             GameNetworkEvent::Connected(conn) => {
                 println!("Connexion établie avec le Broker ");
                 socket.broker_conn = Some(conn);
+
+                let mut auth_packet = Vec::new();
+                auth_packet.push(TAG_ADMIN_CONNECT); // Tag 0x0A
+
+                // On écrit notre nom "spatial" sur 32 octets pour le Broker
+                let mut name_bytes = [0u8; 32];
+                let name_str = b"spatial";
+                name_bytes[..name_str.len()].copy_from_slice(name_str);
+                auth_packet.extend_from_slice(&name_bytes);
+
+                let stream = GameStream::from(0u16); // Stream fiable
+                let _ = socket.peer.send(&conn, &stream, Bytes::from(auth_packet));
+
+                println!("Carte d'identité envoyée : Je suis le 'spatial'");
             }
 
             GameNetworkEvent::Message { data, .. } => {
@@ -163,20 +177,16 @@ pub(crate) fn flush_network_messages(
 
         for boot in boot_reader.read() {
             let mut buffer = Vec::new();
-            buffer.push(0x03);
+            buffer.push(TAG_ADMIN_ROUTE_SEND);
 
             // Topic ciblé : Le salon d'administration de l'Orchestrateur
-            let mut topic_bytes = [0u8; 32];
-            let topic_str = "admin:orchestrator";
-            let bytes = topic_str.as_bytes();
-            let len = bytes.len().min(32);
-            topic_bytes[..len].copy_from_slice(&bytes[..len]);
-            buffer.extend_from_slice(&topic_bytes);
+            let mut target_bytes = [0u8; 32];
+            let target_str = b"orchestrator";
+            target_bytes[..target_str.len()].copy_from_slice(target_str);
+            buffer.extend_from_slice(&target_bytes);
 
             // Construction du Payload interne
             let mut payload = Vec::new();
-
-            // Constante 0x90
             payload.push(PAYLOAD_BOOT_SHARD);
 
             // L'ID du shard à démarrer
