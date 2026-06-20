@@ -33,6 +33,14 @@ pub const INPUT_RIGHT: u8 = 0b00000010; // bit 1
 pub const INPUT_UP:    u8 = 0b00000100; // bit 2
 pub const INPUT_DOWN:  u8 = 0b00001000; // bit 3
 
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClientInit {
+    pub client_id: u32,
+    pub pos_x: f32,
+    pub pos_y: f32,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientInput {
     pub client_id: u32,

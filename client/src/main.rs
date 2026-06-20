@@ -3,13 +3,22 @@ use bevy::prelude::*;
 use game_sockets::{GamePeer, protocols::QuicBackend, GameNetworkEvent, GameConnection, GameStream, GameStreamReliability};
 use shared::*;
 use bincode::*;
+use uuid::uuid;
 
 #[derive(Resource)]
-struct ClientId(u32);
+struct ClientInfo {
+    client_id: u32,
+    pos_x: f32,
+    pos_y: f32,
+}
 
-impl Default for ClientId {
+impl Default for ClientInfo {
     fn default() -> Self {
-        Self(0)
+        Self {
+            client_id: 0,
+            pos_x: 0.0,
+            pos_y: 0.0,
+        }
     }
 }
 
@@ -56,7 +65,7 @@ fn bind_socket(mut commands: Commands) {
 
 fn receive_packet(
     mut socket: ResMut<ClientSocket>,
-    mut client_id: ResMut<ClientId>,
+    mut client_info: ResMut<ClientInfo>,
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
         match event {
@@ -69,8 +78,24 @@ fn receive_packet(
                     0x06 => {
                         if msg_data.len() < 4 { continue; }
                         let id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
-                        client_id.0 = id;
+                        client_info.client_id = id;
                         println!("Mon client_id : {}", id);
+
+                        //envoir du ClientInit au broker
+                        let mut client_init: ClientInit = ClientInit{
+                            client_id: id,
+                            pos_x: client_info.pos_x,
+                            pos_y: client_info.pos_y
+                        };
+                        
+                        let serialized = bincode::serialize(&client_init).expect("Failed to serialize ClientInit");
+                        let mut data = vec![0x51]; //TODO: YANIS IMPLEMENT LE FAIT QUE CE TAG ENVOI LA DATA AU BON DGS
+                        data.extend_from_slice(&serialized);
+                        
+                        if let (Some(connection), Some(stream)) = (&socket.broker_connection, &socket.broker_stream) {
+                            let _ = socket.peer.send(connection, stream, bytes::Bytes::from(data));
+                            println!("ClientInit envoyé au broker");
+                        }
                     },
                     0x04 => {
                         if msg_data.len() < 2 {
@@ -120,7 +145,7 @@ fn receive_packet(
 
 fn send_input(
     mut socket: ResMut<ClientSocket>,
-    client_id: Res<ClientId>,
+    client_id: Res<ClientInfo>,
     mut input_buffer: ResMut<InputBuffer>,
     mut timer: ResMut<InputTimer>,
     time: Res<Time>,
@@ -139,7 +164,7 @@ fn send_input(
     );
 
     let mut input_packet: ClientInput = ClientInput {
-        client_id: client_id.0,
+        client_id: client_id.client_id,
         sequence_id: INPUT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst) as u32,
         input: input_buffer.0,
     };
@@ -163,7 +188,7 @@ fn add_input_in_buffer(buffer: &mut [u8; 16], input: u8) {
 fn main() {
     App::new()
         .add_plugins(MinimalPlugins)
-        .init_resource::<ClientId>()
+        .init_resource::<ClientInfo>()
         .init_resource::<InputBuffer>()
         .init_resource::<InputTimer>()
         .add_systems(Startup, bind_socket)

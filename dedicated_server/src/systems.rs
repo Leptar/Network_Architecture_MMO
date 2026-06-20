@@ -58,55 +58,40 @@ pub fn receive_packets(
                         let msg_tag: u8 = data[0];
                         let msg_data = &data[1..];
                         
-                        let mut msg: Box<dyn InterShardMessage> = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&msg_data)) {
-                            match msg_tag {
-                                HandoffRequest::TAG => Box::new(HandoffRequest::from_json(json)),
-                                HandoffAccept::TAG => Box::new(HandoffAccept::from_json(json)),
-                                HandoffReject::TAG => Box::new(HandoffReject::from_json(json)),
-                                GhostUpdate::TAG => Box::new(GhostUpdate::from_json(json)),
-                                HandoffComplete::TAG => Box::new(HandoffComplete::from_json(json)),
-                                _ => {
-                                    println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                        let mut msg: Box<dyn InterShardMessage> = match msg_tag {
+                            HandoffRequest::TAG => Box::new(HandoffRequest::from_binary(msg_data)),
+                            HandoffAccept::TAG => Box::new(HandoffAccept::from_binary(msg_data)),
+                            HandoffReject::TAG => Box::new(HandoffReject::from_binary(msg_data)),
+                            GhostUpdate::TAG => Box::new(GhostUpdate::from_binary(msg_data)),
+                            HandoffComplete::TAG => Box::new(HandoffComplete::from_binary(msg_data)),
+                            0x55 => { //format min_x min_y max_x max_y en float32
+                                println!("Receive my working zone");
+
+                                if msg_data.len() != 16 {
+                                    println!("Invalid working zone data length : {}, expected 16", msg_data.len());
                                     return;
-                                },
-                            }
-                        } else {
-                            match msg_tag {
-                                HandoffRequest::TAG => Box::new(HandoffRequest::from_binary(msg_data)),
-                                HandoffAccept::TAG => Box::new(HandoffAccept::from_binary(msg_data)),
-                                HandoffReject::TAG => Box::new(HandoffReject::from_binary(msg_data)),
-                                GhostUpdate::TAG => Box::new(GhostUpdate::from_binary(msg_data)),
-                                HandoffComplete::TAG => Box::new(HandoffComplete::from_binary(msg_data)),
-                                0x55 => {
-                                    //format min_x min_y max_x max_y en float32
-                                    println!("Receive my working zone");
+                                }
 
-                                    if msg_data.len() != 16 {
-                                        println!("Invalid working zone data length : {}, expected 16", msg_data.len());
-                                        return;
-                                    }
+                                let min_x = f32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
+                                let min_y = f32::from_le_bytes([msg_data[4], msg_data[5], msg_data[6], msg_data[7]]);
+                                let max_x = f32::from_le_bytes([msg_data[8], msg_data[9], msg_data[10], msg_data[11]]);
+                                let max_y = f32::from_le_bytes([msg_data[12], msg_data[13], msg_data[14], msg_data[15]]);
+                                println!("Working zone received : min_x : {}, min_y : {}, max_x : {}, max_y : {}", min_x, min_y, max_x, max_y);
 
-                                    let min_x = f32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
-                                    let min_y = f32::from_le_bytes([msg_data[4], msg_data[5], msg_data[6], msg_data[7]]);
-                                    let max_x = f32::from_le_bytes([msg_data[8], msg_data[9], msg_data[10], msg_data[11]]);
-                                    let max_y = f32::from_le_bytes([msg_data[12], msg_data[13], msg_data[14], msg_data[15]]);
-                                    println!("Working zone received : min_x : {}, min_y : {}, max_x : {}, max_y : {}", min_x, min_y, max_x, max_y);
+                                server_config.min_x = min_x;
+                                server_config.min_y = min_y;
+                                server_config.max_x = max_x;
+                                server_config.max_y = max_y;
 
-                                    server_config.min_x = min_x;
-                                    server_config.min_y = min_y;
-                                    server_config.max_x = max_x;
-                                    server_config.max_y = max_y;
+                                server_config.state = ServerState::Running;
+                                println!("Server state set to Running");
 
-                                    server_config.state = ServerState::Running;
-                                    println!("Server state set to Running");
-
-                                    return;
-                                },
-                                _ => {
-                                    println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
-                                    return;
-                                },
-                            }
+                                return;
+                            },
+                            _ => {
+                                println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}", msg_tag, connection.connection_id, stream.stream_id);
+                                return;
+                            },
                         };
                         
                         msg.resolve(&mut player_registry, &mut server_config, &socket, connection, stream.clone());
@@ -120,16 +105,40 @@ pub fn receive_packets(
                         let msg_data = &data[1..];
 
                         match msg_tag {
-                            0x05 => {
-                                //Traitement des input player, format : InputClient de shared
+                            0x05 => { //Traitement des input player, format : InputClient de shared
                                 if let Ok(input) = serde_json::from_slice::<ClientInput>(msg_data) {
                                     println!("Received input from client_id : {}, sequence_id : {}, input : {:?}", input.client_id, input.sequence_id, input.input);
                                     player_registry.update_player_input(input.client_id, input.input);
                                 } else {
                                     println!("Received invalid client input message");
                                 }
-                            }
+                            },
+                            0x51 => { //New Player format : client_id (u32), init_x, init_y (float 32)
+                                println!("Receive new player");
 
+                                if msg_data.len() != 12 {
+                                    println!("Invalid new player data length : {}, expected 12", msg_data.len());
+                                    return;
+                                }
+
+                                let client_id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
+                                let init_x = f32::from_le_bytes([msg_data[4], msg_data[5], msg_data[6], msg_data[7]]);
+                                let init_y = f32::from_le_bytes([msg_data[8], msg_data[9], msg_data[10], msg_data[11]]);
+                                println!("New player received : client_id : {}, init_x : {}, init_y : {}", client_id, init_x, init_y);
+
+                                let new_player_entity = &mut PlayerEntity {
+                                    id: client_id,
+                                    authority: EntityAuthority::PendingHandoff,
+                                    position: Vec2::new(init_x, init_y),
+                                    rotation: 0.0,
+                                    velocity: Vec2::ZERO,
+                                };
+
+                                player_registry.register_player(new_player_entity.clone());
+                                println!("Player registered in registry, current player count : {}", player_registry.players.len());
+
+                                return;
+                            },
                             _ => {
                                 println!("Received message with unknown tag : {}, from connection id : {}, with stream id : {}, data : {:?}", msg_tag, connection.connection_id, stream.stream_id, msg_data);
                             }

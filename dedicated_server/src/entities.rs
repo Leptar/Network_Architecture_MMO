@@ -2,7 +2,7 @@
 use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EntityAuthority {
     Owned,
     PendingHandoff,
@@ -13,7 +13,7 @@ pub enum EntityAuthority {
 /*           PLAYER ENTITY           */
 /*************************************/
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PlayerEntity {
     pub id      : u32,
     pub authority: EntityAuthority,
@@ -27,7 +27,7 @@ impl PlayerEntity {
         //prend le premier input de la liste et l'applique au pos du joueur
             let direction = input[0];
             let speed = 5.0; // Vitesse de déplacement du joueur
-            
+
             match direction {
                 0 => self.position.y += speed, // Haut
                 1 => self.position.y -= speed, // Bas
@@ -35,6 +35,10 @@ impl PlayerEntity {
                 3 => self.position.x += speed, // Droite
                 _ => (), // Aucun mouvement
             }
+        
+        //clamp la pos entre pour être dans le positif
+        self.position.x = self.position.x.clamp(0.0, f32::MAX);
+        self.position.y = self.position.y.clamp(0.0, f32::MAX);
     }
 }
 
@@ -56,5 +60,8 @@ impl PlayerRegistry {
         if let Some(player) = self.players.get_mut(&client_id) {
             player.interpret_player_input(input);
         }
+    }
+    pub fn register_player(&mut self, player: PlayerEntity) {
+        self.players.insert(player.id, player);
     }
 }
