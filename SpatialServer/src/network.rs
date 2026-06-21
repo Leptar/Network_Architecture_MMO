@@ -4,7 +4,7 @@ use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Po
 use bytes::Bytes;
 use game_sockets::protocols::{QuicBackend};
 use crate::messages::*;
-use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT, TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_SEND};
+use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT, TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_RECEIVE, TAG_ADMIN_ROUTE_SEND};
 use crate::quadtree::QuadTree;
 
 pub fn connect_to_broker(mut commands: Commands) {
@@ -77,34 +77,40 @@ pub fn receive_position_updates(
             GameNetworkEvent::Message { data, .. } => {
                 if data.is_empty() { continue; }
 
-                let tag = data[0];
-                let rest = &data[1..];
+                let msg_tag = data[0];
+                let msg_data = &data[1..];
+                if msg_tag ==   TAG_ADMIN_ROUTE_RECEIVE {
+                    if msg_data.is_empty() { continue; }
 
-                if tag == 0x10 {
-                    if rest.len() < 12 { continue; }
+                    let internal_tag = msg_data[0];
+                    let rest = &msg_data[1..];
 
-                    let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
-                    let x = f32::from_le_bytes([rest[4], rest[5], rest[6], rest[7]]);
-                    let y = f32::from_le_bytes([rest[8], rest[9], rest[10], rest[11]]);
-                    let nouvelle_position = Vec2::new(x, y);
+                    if internal_tag == 0x10 {
+                        if rest.len() < 12 { continue; }
 
-                    let joueur_trouve = false;
+                        let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
+                        let x = f32::from_le_bytes([rest[4], rest[5], rest[6], rest[7]]);
+                        let y = f32::from_le_bytes([rest[8], rest[9], rest[10], rest[11]]);
+                        let nouvelle_position = Vec2::new(x, y);
 
-                    if let Some(&entity) = player_entities.map.get(&client_id) {
-                        if let Ok(mut pos) = query.get_mut(entity) {
-                            pos.2.0 = nouvelle_position;
+                        let joueur_trouve = false;
+
+                        if let Some(&entity) = player_entities.map.get(&client_id) {
+                            if let Ok(mut pos) = query.get_mut(entity) {
+                                pos.2.0 = nouvelle_position;
+                            }
                         }
-                    }
 
-                    if !joueur_trouve {
-                        println!("Nouveau joueur {} détecté via le réseau en {}, {}", client_id, x, y);
-                        let new_player = commands.spawn((
-                            ClientId(client_id),
-                            Position(nouvelle_position),
-                            CurrentShard(None),        // Il n'a pas encore de shard assigné
-                            NearbyShards(Vec::new()),  // Mémoire radar vide au départ
-                        )).id();
-                        player_entities.map.insert(client_id, new_player);
+                        if !joueur_trouve {
+                            println!("Nouveau joueur {} détecté via le réseau en {}, {}", client_id, x, y);
+                            let new_player = commands.spawn((
+                                ClientId(client_id),
+                                Position(nouvelle_position),
+                                CurrentShard(None),        // Il n'a pas encore de shard assigné
+                                NearbyShards(Vec::new()),  // Mémoire radar vide au départ
+                            )).id();
+                            player_entities.map.insert(client_id, new_player);
+                        }
                     }
                 }
             }
