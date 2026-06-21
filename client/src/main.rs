@@ -75,27 +75,11 @@ fn receive_packet(
                 let msg_tag: u8 = data[0];
                 let msg_data = &data[1..];
                 match msg_tag {
-                    0x06 => {
+                    0x07 => {
                         if msg_data.len() < 4 { continue; }
                         let id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
                         client_info.client_id = id;
                         println!("Mon client_id : {}", id);
-
-                        //envoir du ClientInit au broker
-                        let mut client_init: ClientInit = ClientInit{
-                            client_id: id,
-                            pos_x: client_info.pos_x,
-                            pos_y: client_info.pos_y
-                        };
-                        
-                        let serialized = bincode::serialize(&client_init).expect("Failed to serialize ClientInit");
-                        let mut data = vec![0x51]; //TODO: YANIS IMPLEMENT LE FAIT QUE CE TAG ENVOI LA DATA AU BON DGS
-                        data.extend_from_slice(&serialized);
-                        
-                        if let (Some(connection), Some(stream)) = (&socket.broker_connection, &socket.broker_stream) {
-                            let _ = socket.peer.send(connection, stream, bytes::Bytes::from(data));
-                            println!("ClientInit envoyé au broker");
-                        }
                     },
                     0x04 => {
                         if msg_data.len() < 2 {
@@ -130,8 +114,21 @@ fn receive_packet(
                 socket.broker_stream = Some(stream.clone());
                 println!("Stream créé avec le broker, stream id : {}", stream.stream_id);
 
-                let data = vec![0x07];
-                let _ = socket.peer.send(&connection, &stream, bytes::Bytes::from(data));
+                //envoir du ClientInit au broker
+                let mut client_init: ClientInit = ClientInit{
+                    client_id: 0, //le broker va remplir le client_id dans le ClientInit
+                    pos_x: client_info.pos_x,
+                    pos_y: client_info.pos_y
+                };
+
+                let serialized = bincode::serialize(&client_init).expect("Failed to serialize ClientInit");
+                let mut data = vec![0x07];
+                data.extend_from_slice(&serialized);
+
+                if let (Some(connection), Some(stream)) = (&socket.broker_connection, &socket.broker_stream) {
+                    let _ = socket.peer.send(connection, stream, bytes::Bytes::from(data));
+                    println!("ClientInit envoyé au broker");
+                }
                 println!("Identification envoyée au broker");
             },
 

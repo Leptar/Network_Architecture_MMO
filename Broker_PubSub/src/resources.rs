@@ -9,10 +9,10 @@ pub struct BrokerSocket {
 
 //------------------- INFO CLIENT -------------------//
 pub struct ClientNetworkInfo {
-    broker_to_client_connexion: GameConnection,
-    broker_to_client_stream: GameStream,
-    broker_to_server_connexion: GameConnection,
-    broker_to_server_stream: GameStream,
+    pub broker_to_client_connexion: GameConnection,
+    pub broker_to_client_stream: GameStream,
+    pub broker_to_server_connexion: Option<GameConnection>,
+    pub broker_to_server_stream: Option<GameStream>,
 }
 
 #[derive(Resource, Default)]
