@@ -15,6 +15,11 @@ fn main() {
         .init_resource::<PlayerRegistry>()
         .init_resource::<HeartbeatTimer>()
         .add_systems(Startup, systems::bind_socket)
-        .add_systems(Update, (systems::receive_packets, systems::send_heartbeat, systems::send_ghost_update, systems::publish).chain())
+        .add_systems(Update, (
+            systems::receive_packets,
+            systems::send_heartbeat,
+            systems::send_ghost_update,
+            systems::publish,
+            systems::process_handoffs).chain())
         .run();
 }

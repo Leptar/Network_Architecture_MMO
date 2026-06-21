@@ -913,6 +913,7 @@ name = "dedicated_server"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bincode",
  "bytes",
  "game_sockets",
  "serde",

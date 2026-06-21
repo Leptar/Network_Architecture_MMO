@@ -6,17 +6,17 @@ use crate::resources::*;
 
 pub trait  InterShardMessage {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream);
-    fn to_json(&self) -> serde_json::Value;
+    fn to_binary(&self) -> Vec<u8>;
     fn tag(&self) -> u8;
 }
 
 //---------------------------------- HandoffRequest ----------------------------------//
 
 pub struct HandoffRequest{
-    entity_id: u32,
-    pos: Vec2,
-    vel: Vec2,
-    state: [u8; 64],
+    pub entity_id: u32,
+    pub pos: Vec2,
+    pub vel: Vec2,
+    pub state: [u8; 64],
 }
 
 impl InterShardMessage for HandoffRequest {
@@ -57,13 +57,15 @@ impl InterShardMessage for HandoffRequest {
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "entity_id": self.entity_id,
-            "pos": {"x": self.pos.x, "y": self.pos.y},
-            "vel": {"x": self.vel.x, "y": self.vel.y},
-            "state": String::from_utf8_lossy(&self.state),
-        })
+    fn to_binary(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&self.entity_id.to_le_bytes());
+        buf.extend_from_slice(&self.pos.x.to_le_bytes());
+        buf.extend_from_slice(&self.pos.y.to_le_bytes());
+        buf.extend_from_slice(&self.vel.x.to_le_bytes());
+        buf.extend_from_slice(&self.vel.y.to_le_bytes());
+        buf.extend_from_slice(&self.state);
+        buf
     }
 
     fn tag(&self) -> u8 {
@@ -103,7 +105,7 @@ impl HandoffRequest {
 //---------------------------------- HandoffAccept ----------------------------------//
 
 pub struct HandoffAccept {
-    entity_id: u32,
+    pub entity_id: u32,
 }
 
 impl InterShardMessage for HandoffAccept {
@@ -111,14 +113,15 @@ impl InterShardMessage for HandoffAccept {
         if let Some(player) = registry.players.get_mut(&self.entity_id) {
             if let EntityAuthority::PendingHandoff { .. } = &player.authority {
                 println!("Handoff accepted for entity {}, GhostUpdates will begin.", self.entity_id);
+
+                let complete_msg = HandoffComplete { entity_id: self.entity_id };
+                send_inter_shards_packet(_socket, Box::new(complete_msg));
             }
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "entity_id": self.entity_id,
-        })
+    fn to_binary(&self) -> Vec<u8> {
+        self.entity_id.to_le_bytes().to_vec()
     }
 
     fn tag(&self) -> u8 {
@@ -146,8 +149,8 @@ impl HandoffAccept {
 //---------------------------------- HandoffReject ----------------------------------//
 
 pub struct HandoffReject{
-    entity_id: u32,
-    reason: String,
+    pub entity_id: u32,
+    pub reason: String,
 }
 
 impl InterShardMessage for HandoffReject {
@@ -162,11 +165,11 @@ impl InterShardMessage for HandoffReject {
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "entity_id": self.entity_id,
-            "reason": self.reason,
-        })
+    fn to_binary(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&self.entity_id.to_le_bytes());
+        buf.extend_from_slice(self.reason.as_bytes());
+        buf
     }
 
     fn tag(&self) -> u8 {
@@ -196,7 +199,7 @@ impl HandoffReject {
 //---------------------------------- HandoffComplete ----------------------------------//
 
 pub struct HandoffComplete{
-    entity_id: u32,
+    pub entity_id: u32,
 }
 
 impl InterShardMessage for HandoffComplete {
@@ -213,10 +216,8 @@ impl InterShardMessage for HandoffComplete {
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "entity_id": self.entity_id,
-        })
+    fn to_binary(&self) -> Vec<u8> {
+        self.entity_id.to_le_bytes().to_vec()
     }
 
     fn tag(&self) -> u8 {
@@ -259,12 +260,14 @@ impl InterShardMessage for GhostUpdate {
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "entity_id": self.entity_id,
-            "pos": {"x": self.pos.x, "y": self.pos.y},
-            "vel": {"x": self.vel.x, "y": self.vel.y},
-        })
+    fn to_binary(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&self.entity_id.to_le_bytes());
+        buf.extend_from_slice(&self.pos.x.to_le_bytes());
+        buf.extend_from_slice(&self.pos.y.to_le_bytes());
+        buf.extend_from_slice(&self.vel.x.to_le_bytes());
+        buf.extend_from_slice(&self.vel.y.to_le_bytes());
+        buf
     }
 
     fn tag(&self) -> u8 {
@@ -305,10 +308,11 @@ pub fn send_inter_shards_packet(
     mut socket: &GameSocket,
     msg: Box<dyn InterShardMessage>,
 ) {
-    let json = msg.to_json().to_string();
-    let mut data = vec![0u8; 1 + json.len()];
-    data[0] = msg.tag();
-    data[1..].copy_from_slice(json.as_bytes());
+    let payload = msg.to_binary();
+    let mut data = Vec::with_capacity(1 + payload.len());
+
+    data.push(msg.tag());
+    data.extend_from_slice(&payload);
 
     if let (Some(conn), Some(stream)) = (&socket.connection_orch, &socket.stream_orch) {
         let result = socket.peer.send(conn, stream, bytes::Bytes::from(data));

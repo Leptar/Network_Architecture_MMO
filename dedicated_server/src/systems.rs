@@ -6,6 +6,7 @@ use crate::entities::*;
 use crate::message::*;
 use shared::*;
 use std::net::ToSocketAddrs;
+use bincode;
 
 pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
     // Démarre 1 socket qui vas avoir plusieurs connection (0: Orchestrator, 1:Broker)
@@ -126,12 +127,35 @@ pub fn receive_packets(
                         let msg_data = &data[1..];
 
                         match msg_tag {
-                            0x05 => { //Traitement des input player, format : InputClient de shared
-                                if let Ok(input) = serde_json::from_slice::<ClientInput>(msg_data) {
-                                    println!("Received input from client_id : {}, sequence_id : {}, input : {:?}", input.client_id, input.sequence_id, input.input);
-                                    player_registry.update_player_input(input.client_id, input.input);
-                                } else {
-                                    println!("Received invalid client input message");
+                            0x07 => {
+                                println!("Demande de Spawn (ClientInit) binaire relayée par le Broker !");
+
+                                match bincode::deserialize::<ClientInit>(msg_data) {
+                                    Ok(client_init) => {
+                                        let new_player = PlayerEntity {
+                                            id: client_init.client_id,
+                                            authority: EntityAuthority::Owned,
+                                            position: Vec2::new(client_init.pos_x, client_init.pos_y),
+                                            rotation: 0.0,
+                                            velocity: Vec2::ZERO,
+                                        };
+
+                                        player_registry.register_player(new_player);
+                                        println!("Joueur {} apparu avec succès en ({}, {})",
+                                                 client_init.client_id, client_init.pos_x, client_init.pos_y
+                                        );
+                                    },
+                                    Err(e) => println!("Erreur bincode ClientInit : {}", e),
+                                }
+                            },
+
+                            0x05 => {
+                                match bincode::deserialize::<ClientInput>(msg_data) {
+                                    Ok(input) => {
+                                        // On met à jour la physique sans inonder la console
+                                        player_registry.update_player_input(input.client_id, input.input);
+                                    },
+                                    Err(e) => println!(" Erreur bincode ClientInput : {}", e),
                                 }
                             },
                             TAG_ADMIN_ROUTE_RECEIVE => {
@@ -208,6 +232,19 @@ pub fn receive_packets(
                                             let _ = socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(auth_packet));
                                             println!("Identité mise à jour sur le Broker : {}", name_str);
                                         }
+
+                                        let mut bounds_packet = Vec::new();
+                                        bounds_packet.push(0x00); // Tag 0x00 for server info update
+                                        bounds_packet.extend_from_slice(&shard_id.to_le_bytes());
+                                        bounds_packet.extend_from_slice(&min_x.to_le_bytes());
+                                        bounds_packet.extend_from_slice(&min_y.to_le_bytes());
+                                        bounds_packet.extend_from_slice(&max_x.to_le_bytes());
+                                        bounds_packet.extend_from_slice(&max_y.to_le_bytes());
+
+                                        if let (Some(broker_conn), Some(broker_stream)) = (&socket.connection_broker, &socket.stream_broker) {
+                                            let _ = socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(bounds_packet));
+                                            println!("Frontières envoyées au Broker pour le routage des joueurs !");
+                                        }
                                     },
 
                                     PAYLOAD_CROSSING_ALERT => {
@@ -222,8 +259,24 @@ pub fn receive_packets(
                                             );
 
                                             // TODO logique de Handoff/Ghost :
-                                            // 1. Si ce DGS possède le joueur, il commence à envoyer ses GhostUpdates aux shards impliqués.
-                                            // 2. Si ce DGS ne possède pas le joueur, il crée une entité avec EntityAuthority::Ghost.
+                                            if let Some(player) = player_registry.players.get_mut(&alert_data.client_id) {
+                                                if matches!(player.authority, EntityAuthority::Owned) {
+                                                    //active l'émission des GhostUpdates
+                                                    player.authority = EntityAuthority::PendingHandoff;
+                                                    println!("Joueur {} proche de la frontière : passage en PendingHandoff", alert_data.client_id);
+                                                }
+                                            } else {
+                                                //autre serveur : on lui prépare un réceptacle vide
+                                                let ghost = PlayerEntity {
+                                                    id: alert_data.client_id,
+                                                    authority: EntityAuthority::Ghost,
+                                                    position: Vec2::ZERO, // Sera corrigé instantanément par le premier GhostUpdate (normalement)
+                                                    rotation: 0.0,
+                                                    velocity: Vec2::ZERO,
+                                                };
+                                                player_registry.register_player(ghost);
+                                                println!("Fantôme préparé pour le joueur {} venant d'une autre zone", alert_data.client_id);
+                                            }
 
                                         } else {
                                             println!("Erreur : Impossible de désérialiser le CrossingAlert (données corrompues ou incomplètes).");
@@ -374,32 +427,66 @@ pub fn publish(
             continue;
         }
 
-        // Construire le payload : id + position + vélocité
+        let mut buffer = Vec::new();
+        buffer.push(TAG_ADMIN_ROUTE_SEND); // Tag 0x0B
+
+        // La cible est le Serveur Spatial (sur 32 octets)
+        let mut target_bytes = [0u8; 32];
+        let target_str = b"spatial";
+        target_bytes[..target_str.len()].copy_from_slice(target_str);
+        buffer.extend_from_slice(&target_bytes);
+
         let mut payload = Vec::new();
-        payload.extend_from_slice(&player_id.to_le_bytes());           // 4 bytes
-        payload.extend_from_slice(&player.position.x.to_le_bytes());   // 4 bytes
-        payload.extend_from_slice(&player.position.y.to_le_bytes());   // 4 bytes
-        payload.extend_from_slice(&player.velocity.x.to_le_bytes());   // 4 bytes
-        payload.extend_from_slice(&player.velocity.y.to_le_bytes());   // 4 bytes
-        // Total : 20 bytes
+        payload.push(0x10); // Le Tag de position attendu par le Serveur Spatial
 
-        // Construire le topic (32 bytes paddés avec des \0)
-        let topic_str = format!("s{}p{}", config.id, player_id);
-        let mut topic_bytes = [0u8; 32];
-        let bytes = topic_str.as_bytes();
-        let len = bytes.len().min(32);
-        topic_bytes[..len].copy_from_slice(&bytes[..len]);
+        // Le Spatial lit exactement 12 octets : ID (4) + X (4) + Y (4)
+        payload.extend_from_slice(&player_id.to_le_bytes());
+        payload.extend_from_slice(&player.position.x.to_le_bytes());
+        payload.extend_from_slice(&player.position.y.to_le_bytes());
 
-        // Construire le message complet 0x03 (Publish)
-        let mut msg = Vec::new();
-        msg.push(0x03u8);
-        msg.extend_from_slice(&topic_bytes);
-        msg.extend_from_slice(&(payload.len() as u16).to_le_bytes());
-        msg.extend_from_slice(&payload);
+        let payload_len = payload.len() as u16;
+        buffer.extend_from_slice(&payload_len.to_le_bytes());
+        buffer.extend_from_slice(&payload);
 
-        // Envoyer au broker
+        // Envoyer au Broker via le stream fiable
         if let (Some(conn), Some(stream)) = (&socket.connection_broker, &socket.stream_broker) {
-            let _ = socket.peer.send(conn, stream, bytes::Bytes::from(msg));
+            let _ = socket.peer.send(conn, stream, bytes::Bytes::from(buffer));
+        }
+    }
+}
+
+pub fn process_handoffs(
+    socket: Res<GameSocket>,
+    mut registry: ResMut<PlayerRegistry>,
+    config: Res<ServerConfig>,
+) {
+    let mut handoff_triggered = Vec::new();
+
+    for player in registry.players.values() {
+        if matches!(player.authority, EntityAuthority::PendingHandoff) {
+            // Est-il physiquement sorti de la zone de simu
+            if player.position.x < config.min_x || player.position.x > config.max_x ||
+                player.position.y < config.min_y || player.position.y > config.max_y {
+                handoff_triggered.push(player.clone());
+            }
+        }
+    }
+
+    for player in handoff_triggered {
+        println!("Joueur {} hors frontières. Envoi du HandoffRequest.", player.id);
+
+        let req = HandoffRequest {
+            entity_id: player.id,
+            pos: player.position,
+            vel: player.velocity,
+            state: [0; 64], // Stub
+        };
+
+        send_inter_shards_packet(&socket, Box::new(req));
+
+        // change pour Ghost localement pour ne pas envoyer la requête 60 fois par seconde
+        if let Some(p) = registry.players.get_mut(&player.id) {
+            p.authority = EntityAuthority::Ghost;
         }
     }
 }

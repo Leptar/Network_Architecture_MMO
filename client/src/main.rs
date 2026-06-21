@@ -16,8 +16,8 @@ impl Default for ClientInfo {
     fn default() -> Self {
         Self {
             client_id: 0,
-            pos_x: 0.0,
-            pos_y: 0.0,
+            pos_x: 2500.0,
+            pos_y: 2500.0,
         }
     }
 }
@@ -94,6 +94,14 @@ fn receive_packet(
                         let payload = &msg_data[2..2 + payload_len];
                         println!("Received Broadcast message with payload length : {}, payload : {:?}", payload_len, payload);
                     }
+
+                    0x06 => {
+                        if msg_data.len() < 4 { continue; }
+                        let id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
+                        client_info.client_id = id;
+                        println!("Identité reçue ! Mon client_id : {}", id);
+                    },
+
                     _ => {
                         println!("Received message with unknown tag : {}", msg_tag);
                     },
@@ -147,18 +155,17 @@ fn send_input(
     mut timer: ResMut<InputTimer>,
     time: Res<Time>,
 ) {
+    // Ne rien envoyer si on n'a pas encore reçu notre ID du Broker
+    if client_id.client_id == 0 {
+        return;
+    }
+
     timer.0.tick(time.delta());
     if !timer.0.just_finished() {
         return;
     }
 
-    add_input_in_buffer(
-        &mut input_buffer.0,
-        (if rand::random::<bool>() { INPUT_LEFT } else { 0 })
-            | (if rand::random::<bool>() { INPUT_RIGHT } else { 0 })
-            | (if rand::random::<bool>() { INPUT_UP } else { 0 })
-            | (if rand::random::<bool>() { INPUT_DOWN } else { 0 }),
-    );
+    add_input_in_buffer(&mut input_buffer.0, INPUT_RIGHT);
 
     let mut input_packet: ClientInput = ClientInput {
         client_id: client_id.client_id,
