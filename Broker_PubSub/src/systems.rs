@@ -1,7 +1,7 @@
 ﻿use bevy::prelude::*;
 use game_sockets::{GamePeer, protocols::QuicBackend, GameNetworkEvent};
-use shared::{TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_RECEIVE, TAG_ADMIN_ROUTE_SEND};
-use crate::resources::{BrokerSocket, ClientRegistry, SubscriptionMap, ClientShardMap, AdminRegistry};
+use shared::*;
+use crate::resources::*;
 
 pub fn bind_socket(mut commands: Commands) {
     let peer = GamePeer::new(QuicBackend::new());
@@ -15,7 +15,7 @@ pub fn receive_messages(
     mut socket: ResMut<BrokerSocket>,
     mut clients: ResMut<ClientRegistry>,
     mut subs: ResMut<SubscriptionMap>,
-    mut shard_map: ResMut<ClientShardMap>,
+    mut shard_map: ResMut<ShardMap>,
     mut admin_registry: ResMut<AdminRegistry>
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
@@ -35,6 +35,8 @@ pub fn receive_messages(
                             .to_string();
 
                         shard_map.shard_connections.insert(topic.clone(), connection);
+
+                        //TODO: remplir shardmap avec l'info de connection du server format, ServerID (u32), min_x, max_x, min_y, max_y (f32)
 
                         println!("Shard '{}' enregistré", topic);
                     }
@@ -136,7 +138,6 @@ pub fn receive_messages(
                         // Le client se déclare
                         let client_id = clients.next_id;
                         clients.next_id += 1;
-                        clients.clients.insert(client_id, connection);
 
                         let mut response = Vec::new();
                         response.push(0x06u8);
@@ -148,14 +149,14 @@ pub fn receive_messages(
                             bytes::Bytes::from(response)
                         );
 
-                        println!("Client identifié, id assigné : {}", client_id); //TODO: retiré identification (ID client = ID CONNECTION (car elle est unique))
-                    }
-                    0x51 => {
-                        //TODO: REGARDE DANS LIB LE MSG CLIENTINIT et envoyer au bon shard les donner de connection (tu sais que c'est un client car c'est un msg utiliser seulement par eux)
+                        println!("Client identifié, id assigné : {}", client_id);
+
+                        //TODO: envoyer le client init au bon server (envoyer la variable data)
                     }
 
                     TAG_ADMIN_CONNECT => {
                         if rest.len() < 32 { continue; }
+
                         // Le serveur envoie son nom. le lit et l'ajoute à la liste des services.
                         let admin_name = String::from_utf8_lossy(&rest[0..32]).trim_matches('\0').to_string();
                         admin_registry.admins.insert(admin_name.clone(), connection);
