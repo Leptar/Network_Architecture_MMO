@@ -6,7 +6,7 @@ use shared::*;
 #[derive(Resource)]
 pub struct ServerConfig {
     pub ip: String,
-    pub id: Uuid,
+    pub id: u32,
     pub port: u16,
     pub zone: String,
     pub max_players: usize,
@@ -38,9 +38,10 @@ impl ServerConfig {
             .parse::<usize>()
             .expect("MAX_PLAYERS doit être un nombre valide");
 
-        // uuid::Uuid::new_v4() génère un identifiant unique aléatoire
-        // ex: "550e8400-e29b-41d4-a716-446655440000"
-        let id = Uuid::new_v4();
+        //
+        let id = std::env::var("SERVER_ID")
+            .unwrap_or((-1).to_string()).parse::<u32>()
+            .expect("SERVER_ID doit être un nombre valide");
 
         let socket = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
         socket.connect("8.8.8.8:80").unwrap();

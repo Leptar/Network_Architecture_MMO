@@ -88,6 +88,23 @@ pub fn receive_packets(
 
                                 server_config.state = ServerState::Running;
                                 println!("Server state set to Running");
+                                
+                                //send info to broker format : ServerID (u32), min_x, max_x, min_y, max_y (f32)
+                                let mut info_packet = Vec::new();
+                                info_packet.push(0x00); // Tag 0x00 for server info update
+                                info_packet.extend_from_slice(&shard_id.to_le_bytes());
+                                info_packet.extend_from_slice(&min_x.to_le_bytes());
+                                info_packet.extend_from_slice(&min_y.to_le_bytes());
+                                info_packet.extend_from_slice(&max_x.to_le_bytes());
+                                info_packet.extend_from_slice(&max_y.to_le_bytes());
+                                
+                                if let (Some(broker_conn), Some(broker_stream)) = (&socket.connection_broker, &socket.stream_broker) {
+                                    socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(info_packet)).expect("Failed to send server info to Broker");
+                                    println!("Server info sent to Broker");
+                                    
+                                } else {
+                                    println!("WARNING : Broker connection or stream not established yet, cannot send server info");
+                                }
 
                                 return;
                             },
@@ -123,7 +140,7 @@ pub fn receive_packets(
                                 let payload = &msg_data[1..];
 
                                 match internal_tag {
-                                    0x51 => {
+                                    0x07 => {
                                         println!("Receive new player via admin");
 
                                         if payload.len() != 12 {
