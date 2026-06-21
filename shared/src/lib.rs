@@ -65,7 +65,7 @@ pub const PAYLOAD_CROSSING_ALERT: u8 = 0x99;
 
 pub const PAYLOAD_BOOT_SHARD: u8 = 0x90;
 
-//------------------------------------------------//
+pub const PAYLOAD_WAKEUP_COMMAND: u8 = 0x91;
 
 //------------ TAGS DE ROUTAGE BROKER (L'Enveloppe) ------------//
 pub const TAG_ADMIN_CONNECT: u8 = 0x0A;       // Pour que l'Orch/Spatial s'identifie

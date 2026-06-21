@@ -67,7 +67,7 @@ pub fn receive_packets(
 
                 //Message du Broker
                 if let Some(broker_conn) = &socket.connection_broker {
-                    if (connection.connection_id == broker_conn.connection_id) {
+                    if connection.connection_id == broker_conn.connection_id {
                         debug_msg(format!("Received message from Broker with connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data));
 
                         if data[0] == TAG_ADMIN_ROUTE_RECEIVE {
@@ -76,7 +76,7 @@ pub fn receive_packets(
                                 let internal_tag = payload[0];
 
                                 if internal_tag == PAYLOAD_BOOT_SHARD {
-                                    if payload.len() >= 21 { // 1(tag) + 4(id) + 16(rect)
+                                    if payload.len() >= 21 {
                                         let shard_id = u32::from_le_bytes([payload[1], payload[2], payload[3], payload[4]]);
                                         let min_x = f32::from_le_bytes([payload[5], payload[6], payload[7], payload[8]]);
                                         let min_y = f32::from_le_bytes([payload[9], payload[10], payload[11], payload[12]]);
@@ -85,9 +85,45 @@ pub fn receive_packets(
 
                                         debug_msg(format!("Demande de Boot pour le Shard {} ! Zone : [Min:({}, {}), Max:({}, {})]", shard_id, min_x, min_y, max_x, max_y));
 
-                                        // C'est ICI que l'Orchestrateur devra chercher un serveur Idle dans Redis,
-                                        // et lui envoyer un paquet direct via `socket.dgs_network_info_dictionary`
-                                        // pour le réveiller et lui donner ces coordonnées !
+                                        let mut con = redis_connection.client.get_connection().expect("Failed to connect to Redis");
+
+                                        if let Some(idle_uuid) = get_idle_server_id(&mut con) {
+
+                                            let _: () = redis::cmd("HSET")
+                                                .arg(format!("server:{}", idle_uuid))
+                                                .arg("state").arg("warmup")
+                                                .query(&mut con).expect("Failed to lock server in Redis");
+
+                                            let mut buffer = Vec::new();
+                                            buffer.push(shared::TAG_ADMIN_ROUTE_SEND);
+
+                                            let mut target_bytes = [0u8; 32];
+                                            let target_str = format!("dgs_{}", idle_uuid);
+                                            let bytes = target_str.as_bytes();
+                                            let len = bytes.len().min(32);
+                                            target_bytes[..len].copy_from_slice(&bytes[..len]);
+                                            buffer.extend_from_slice(&target_bytes);
+
+                                            let mut payload = Vec::new();
+                                            payload.push(PAYLOAD_WAKEUP_COMMAND); // Tag 0x91
+                                            payload.extend_from_slice(&shard_id.to_le_bytes()); // Le badge logique Spatial
+                                            payload.extend_from_slice(&min_x.to_le_bytes());
+                                            payload.extend_from_slice(&min_y.to_le_bytes());
+                                            payload.extend_from_slice(&max_x.to_le_bytes());
+                                            payload.extend_from_slice(&max_y.to_le_bytes());
+
+                                            let payload_len = payload.len() as u16;
+                                            buffer.extend_from_slice(&payload_len.to_le_bytes());
+                                            buffer.extend_from_slice(&payload);
+
+                                            if let Some(broker_stream) = &socket.stream_broker {
+                                                let _ = socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(buffer));
+                                                debug_msg(format!("WakeUp envoyé au serveur : {}", target_str));
+                                            }
+
+                                        } else {
+                                            debug_msg("Aucun serveur DGS inactif disponible dans le pool redis Le Spatial attend dans le vide.".to_string());
+                                        }
                                     }
                                 }
                             }
@@ -292,4 +328,25 @@ pub fn scaler_loop(
     }
 
     debug_msg(format!("Scaler loop: {} idle servers, {} total servers", idle_servers, count_servers(&mut con)));
+}
+
+fn get_idle_server_id(con: &mut redis::Connection) -> Option<String> {
+    let keys: Vec<String> = redis::cmd("KEYS")
+        .arg("server:*")
+        .query(con)
+        .unwrap_or_default();
+
+    for key in keys {
+        let state: String = redis::cmd("HGET")
+            .arg(&key)
+            .arg("state")
+            .query(con)
+            .unwrap_or_default();
+
+        if state == "idle" {
+            // On enlève "server:" pour ne garder que l'UUID pur (ex: "123e4567-...")
+            return Some(key.replace("server:", ""));
+        }
+    }
+    None
 }
