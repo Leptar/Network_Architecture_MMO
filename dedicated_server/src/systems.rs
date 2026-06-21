@@ -302,7 +302,42 @@ pub fn send_ghost_update(
 }
 
 pub fn publish(
+    mut socket: ResMut<GameSocket>,
     registry: Res<PlayerRegistry>,
+    config: Res<ServerConfig>,
 ) {
-    //println!("--- Player Registry ---");
+    // Pour chaque joueur dont on a l'autorité
+    for (player_id, player) in registry.players.iter() {
+        if !matches!(player.authority, EntityAuthority::Owned | EntityAuthority::PendingHandoff) {
+            continue;
+        }
+
+        // Construire le payload : id + position + vélocité
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&player_id.to_le_bytes());           // 4 bytes
+        payload.extend_from_slice(&player.position.x.to_le_bytes());   // 4 bytes
+        payload.extend_from_slice(&player.position.y.to_le_bytes());   // 4 bytes
+        payload.extend_from_slice(&player.velocity.x.to_le_bytes());   // 4 bytes
+        payload.extend_from_slice(&player.velocity.y.to_le_bytes());   // 4 bytes
+        // Total : 20 bytes
+
+        // Construire le topic (32 bytes paddés avec des \0)
+        let topic_str = format!("s{}p{}", config.id, player_id);
+        let mut topic_bytes = [0u8; 32];
+        let bytes = topic_str.as_bytes();
+        let len = bytes.len().min(32);
+        topic_bytes[..len].copy_from_slice(&bytes[..len]);
+
+        // Construire le message complet 0x03 (Publish)
+        let mut msg = Vec::new();
+        msg.push(0x03u8);
+        msg.extend_from_slice(&topic_bytes);
+        msg.extend_from_slice(&(payload.len() as u16).to_le_bytes());
+        msg.extend_from_slice(&payload);
+
+        // Envoyer au broker
+        if let (Some(conn), Some(stream)) = (&socket.connection_broker, &socket.stream_broker) {
+            let _ = socket.peer.send(conn, stream, bytes::Bytes::from(msg));
+        }
+    }
 }
