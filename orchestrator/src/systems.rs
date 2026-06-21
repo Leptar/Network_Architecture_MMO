@@ -70,6 +70,29 @@ pub fn receive_packets(
                     if (connection.connection_id == broker_conn.connection_id) {
                         debug_msg(format!("Received message from Broker with connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data));
 
+                        if data[0] == TAG_ADMIN_ROUTE_RECEIVE {
+                            let payload = &data[1..];
+                            if !payload.is_empty() {
+                                let internal_tag = payload[0];
+
+                                if internal_tag == PAYLOAD_BOOT_SHARD {
+                                    if payload.len() >= 21 { // 1(tag) + 4(id) + 16(rect)
+                                        let shard_id = u32::from_le_bytes([payload[1], payload[2], payload[3], payload[4]]);
+                                        let min_x = f32::from_le_bytes([payload[5], payload[6], payload[7], payload[8]]);
+                                        let min_y = f32::from_le_bytes([payload[9], payload[10], payload[11], payload[12]]);
+                                        let max_x = f32::from_le_bytes([payload[13], payload[14], payload[15], payload[16]]);
+                                        let max_y = f32::from_le_bytes([payload[17], payload[18], payload[19], payload[20]]);
+
+                                        debug_msg(format!("Demande de Boot pour le Shard {} ! Zone : [Min:({}, {}), Max:({}, {})]", shard_id, min_x, min_y, max_x, max_y));
+
+                                        // C'est ICI que l'Orchestrateur devra chercher un serveur Idle dans Redis,
+                                        // et lui envoyer un paquet direct via `socket.dgs_network_info_dictionary`
+                                        // pour le réveiller et lui donner ces coordonnées !
+                                    }
+                                }
+                            }
+                        }
+
                         continue;
                     }
                 } else {
@@ -102,10 +125,21 @@ pub fn receive_packets(
 
             GameNetworkEvent::StreamCreated(connection, stream) => {
                 //Stream du Broker
-                if let Some(broker_conn) = &socket.connection_broker {
+                if let Some(broker_conn) = &socket.connection_broker.clone() {
                     if (connection.connection_id == broker_conn.connection_id) {
                         socket.stream_broker = Some(stream.clone());
                         debug_msg(format!("Stream created with Broker, connection id : {}, stream id : {}", connection.connection_id, stream.stream_id));
+                        let mut auth_packet = Vec::new();
+                        auth_packet.push(TAG_ADMIN_CONNECT);
+
+                        // On s'identifie en tant que "orchestrator"
+                        let mut name_bytes = [0u8; 32];
+                        let name_str = b"orchestrator";
+                        name_bytes[..name_str.len()].copy_from_slice(name_str);
+                        auth_packet.extend_from_slice(&name_bytes);
+
+                        let _ = socket.peer.send(&broker_conn, &stream, bytes::Bytes::from(auth_packet));
+                        debug_msg("Identification envoyée au Broker : 'orchestrator'".to_string());
                     } else {
                         debug_msg(format!("WARNING : Broker connection not established yet, received message from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id));
                     }

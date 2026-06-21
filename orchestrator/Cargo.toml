@@ -12,3 +12,4 @@ shared.workspace = true
 game_sockets.workspace = true
 bevy.workspace = true
 uuid.workspace = true
+bytes = "1.11.1"
