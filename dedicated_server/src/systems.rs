@@ -88,7 +88,7 @@ pub fn receive_packets(
 
                                 server_config.state = ServerState::Running;
                                 println!("Server state set to Running");
-                                
+
                                 //send info to broker format : ServerID (u32), min_x, max_x, min_y, max_y (f32)
                                 let mut info_packet = Vec::new();
                                 info_packet.push(0x00); // Tag 0x00 for server info update
@@ -97,11 +97,12 @@ pub fn receive_packets(
                                 info_packet.extend_from_slice(&min_y.to_le_bytes());
                                 info_packet.extend_from_slice(&max_x.to_le_bytes());
                                 info_packet.extend_from_slice(&max_y.to_le_bytes());
-                                
+
                                 if let (Some(broker_conn), Some(broker_stream)) = (&socket.connection_broker, &socket.stream_broker) {
-                                    socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(info_packet)).expect("Failed to send server info to Broker");
-                                    println!("Server info sent to Broker");
-                                    
+                                    match socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(info_packet)) {
+                                        Ok(_) => println!("Server info sent to Broker"),
+                                        Err(e) => println!("Failed to send server info to Broker: {:?}", e),
+                                    }
                                 } else {
                                     println!("WARNING : Broker connection or stream not established yet, cannot send server info");
                                 }
