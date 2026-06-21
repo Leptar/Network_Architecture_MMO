@@ -74,7 +74,11 @@ pub fn receive_packets(
                         debug_msg(format!("Received message from Broker with connection id : {}, with stream id : {}, data : {:?}", connection.connection_id, stream.stream_id, data));
 
                         if data[0] == TAG_ADMIN_ROUTE_RECEIVE {
-                            let payload = &data[1..];
+                            let payload = if data[0] == TAG_ADMIN_ROUTE_RECEIVE {
+                                &data[1..]
+                            } else {
+                                &*data
+                            };
                             if !payload.is_empty() {
                                 let internal_tag = payload[0];
 
@@ -98,7 +102,7 @@ pub fn receive_packets(
                                                 .query(&mut con).expect("Failed to lock server in Redis");
 
                                             let mut buffer = Vec::new();
-                                            buffer.push(shared::TAG_ADMIN_ROUTE_SEND);
+                                            buffer.push(TAG_ADMIN_ROUTE_SEND);
 
                                             let mut target_bytes = [0u8; 32];
                                             let target_str = format!("dgs_{}", idle_uuid);

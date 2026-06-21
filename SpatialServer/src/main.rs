@@ -46,18 +46,12 @@ fn main() {
 
 fn init_spatial_service(
     mut commands: Commands,
-    mut boot_evts : MessageWriter<BootShardMessage>,
 ) {
     let world_bounds = Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(10000.0, 10000.0));
-    let max_depth = 2;
+    let max_depth = 1;
 
     let quad_tree = QuadTree::generate(world_bounds, max_depth);
     println!("[STARTUP] Initialisation du QuadTree mondial...");
-
-    for (shard_id, bounds) in quad_tree.get_leaves(){
-        println!("Grille initiale : Planification du Shard {} -> Zone: {:?}", shard_id, bounds);
-        boot_evts.write(BootShardMessage{shard_id, bounds});
-    }
 
     commands.insert_resource(quad_tree);
     commands.insert_resource(PlayerEntities {

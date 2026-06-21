@@ -5,6 +5,7 @@ use bytes::Bytes;
 use game_sockets::protocols::{QuicBackend};
 use crate::messages::*;
 use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT, TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_SEND};
+use crate::quadtree::QuadTree;
 
 pub fn connect_to_broker(mut commands: Commands) {
 
@@ -33,7 +34,9 @@ pub fn receive_position_updates(
     mut commands: Commands,
     mut socket: ResMut<SpatialSocket>,
     mut player_entities: ResMut<PlayerEntities>,
-    mut query: Query<(Entity, &ClientId, &mut Position)>
+    mut query: Query<(Entity, &ClientId, &mut Position)>,
+    quad_tree: Res<QuadTree>,
+    mut boot_evts: MessageWriter<BootShardMessage>,
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
         match event {
@@ -64,6 +67,11 @@ pub fn receive_position_updates(
                 let _ = socket.peer.send(&connection, &stream, Bytes::from(auth_packet));
 
                 println!("Carte d'identité envoyée : Je suis le 'spatial'");
+
+                for (shard_id, bounds) in quad_tree.get_leaves() {
+                    println!("Demande de Boot pour Shard {} -> Zone: {:?}", shard_id, bounds);
+                    boot_evts.write(BootShardMessage { shard_id, bounds });
+                }
             }
 
             GameNetworkEvent::Message { data, .. } => {

@@ -247,10 +247,14 @@ pub fn receive_messages(
                         let payload = &rest[34..34 + payload_len];
 
                         if let Some(target_info) = admin_registry.admins.get(&target_name) {
+                            let mut direct_msg = Vec::with_capacity(1 + payload.len());
+                            direct_msg.push(TAG_ADMIN_ROUTE_RECEIVE); // Tag 0x0C
+                            direct_msg.extend_from_slice(payload);
+
                             let _ = socket.peer.send(
                                 &target_info.connection_admin,
                                 &target_info.stream_admin,
-                                bytes::Bytes::from(payload.to_vec())
+                                bytes::Bytes::from(direct_msg) // On envoie le message ré-emballé
                             );
                             println!("Message privé envoyé à {} ({} bytes)", target_name, payload_len);
                         } else {

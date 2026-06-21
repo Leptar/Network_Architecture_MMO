@@ -166,7 +166,69 @@ pub fn receive_packets(
                                         println!("Player registered in registry, current player count : {}", player_registry.players.len());
                                     },
 
-                                    // TODO : PAYLOAD_CROSSING_ALERT 
+                                    PAYLOAD_WAKEUP_COMMAND => {
+                                        println!("Message de réveil (WakeUp) reçu via le Broker");
+
+                                        // 4 octets (ID) + 16 octets (coordonnées f32) = 20 octets minimum attendus
+                                        if payload.len() < 20 {
+                                            println!("Invalid WakeUp data length: {}, expected at least 20", payload.len());
+                                            return;
+                                        }
+
+                                        // Note: `payload` commence APRÈS le tag, donc l'index 0 est le début du shard_id
+                                        let shard_id = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+                                        let min_x = f32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+                                        let min_y = f32::from_le_bytes([payload[8], payload[9], payload[10], payload[11]]);
+                                        let max_x = f32::from_le_bytes([payload[12], payload[13], payload[14], payload[15]]);
+                                        let max_y = f32::from_le_bytes([payload[16], payload[17], payload[18], payload[19]]);
+
+                                        println!("Working zone received : Shard: {}, min_x : {}, min_y : {}, max_x : {}, max_y : {}", shard_id, min_x, min_y, max_x, max_y);
+
+                                        // Mise à jour du serveur global
+                                        server_config.zone = shard_id.to_string();
+                                        server_config.min_x = min_x;
+                                        server_config.min_y = min_y;
+                                        server_config.max_x = max_x;
+                                        server_config.max_y = max_y;
+                                        server_config.state = ServerState::Running;
+
+                                        println!("Server state set to Running for Shard {}", shard_id);
+
+                                        // previen le brocker quon est le "shard:X"
+                                        let mut auth_packet = Vec::new();
+                                        auth_packet.push(TAG_ADMIN_CONNECT); // Tag 0x0A
+
+                                        let name_str = format!("shard:{}", shard_id);
+                                        let mut name_bytes = [0u8; 32];
+                                        let bytes = name_str.as_bytes();
+                                        name_bytes[..bytes.len().min(32)].copy_from_slice(&bytes[..bytes.len().min(32)]);
+                                        auth_packet.extend_from_slice(&name_bytes);
+
+                                        if let (Some(broker_conn), Some(broker_stream)) = (&socket.connection_broker, &socket.stream_broker) {
+                                            let _ = socket.peer.send(broker_conn, broker_stream, bytes::Bytes::from(auth_packet));
+                                            println!("Identité mise à jour sur le Broker : {}", name_str);
+                                        }
+                                    },
+
+                                    PAYLOAD_CROSSING_ALERT => {
+                                        println!("Alerte de Frontière (CrossingAlert) reçue via le tunnel");
+
+                                        // Note: la methode from byte est dans lib
+                                        if let Some(alert_data) = CrossingAlertData::from_bytes(payload) {
+                                            println!(
+                                                "Le joueur {} s'approche des bordures. Shards impliqués : {:?}",
+                                                alert_data.client_id,
+                                                alert_data.involved_shards
+                                            );
+
+                                            // TODO logique de Handoff/Ghost :
+                                            // 1. Si ce DGS possède le joueur, il commence à envoyer ses GhostUpdates aux shards impliqués.
+                                            // 2. Si ce DGS ne possède pas le joueur, il crée une entité avec EntityAuthority::Ghost.
+
+                                        } else {
+                                            println!("Erreur : Impossible de désérialiser le CrossingAlert (données corrompues ou incomplètes).");
+                                        }
+                                    },
                                     _ => {
                                         println!("Unknown internal tag in Admin: {}", internal_tag);
                                     }
