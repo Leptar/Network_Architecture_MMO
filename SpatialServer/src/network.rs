@@ -1,6 +1,6 @@
 ﻿use bevy::prelude::*;
 use game_sockets::*;
-use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Position, SpatialSocket};
+use crate::components::{BootQueue, ClientId, CurrentShard, NearbyShards, PlayerEntities, Position, SpatialSocket};
 use bytes::Bytes;
 use game_sockets::protocols::{QuicBackend};
 use crate::messages::*;
@@ -26,7 +26,8 @@ pub fn connect_to_broker(mut commands: Commands) {
     // On insère notre ressource globale dans l'ECS
     commands.insert_resource(SpatialSocket {
         peer,
-        broker_conn: None
+        broker_conn: None,
+        has_booted: false,
     });
 }
 
@@ -37,6 +38,7 @@ pub fn receive_position_updates(
     mut query: Query<(Entity, &ClientId, &mut Position)>,
     quad_tree: Res<QuadTree>,
     mut boot_evts: MessageWriter<BootShardMessage>,
+    mut queue: ResMut<BootQueue>
 ) {
     while let Ok(Some(event)) = socket.peer.poll() {
         match event {
@@ -67,10 +69,12 @@ pub fn receive_position_updates(
                 let _ = socket.peer.send(&connection, &stream, Bytes::from(auth_packet));
 
                 println!("Carte d'identité envoyée : Je suis le 'spatial'");
+                if !socket.has_booted {
+                    socket.has_booted = true;
 
-                for (shard_id, bounds) in quad_tree.get_leaves() {
-                    println!("Demande de Boot pour Shard {} -> Zone: {:?}", shard_id, bounds);
-                    boot_evts.write(BootShardMessage { shard_id, bounds });
+                    for (shard_id, bounds) in quad_tree.get_leaves() {
+                        queue.0.push((shard_id, bounds));
+                    }
                 }
             }
 
@@ -93,23 +97,22 @@ pub fn receive_position_updates(
                         let y = f32::from_le_bytes([rest[8], rest[9], rest[10], rest[11]]);
                         let nouvelle_position = Vec2::new(x, y);
 
-                        let joueur_trouve = false;
-
                         if let Some(&entity) = player_entities.map.get(&client_id) {
+
                             if let Ok(mut pos) = query.get_mut(entity) {
                                 pos.2.0 = nouvelle_position;
                             }
-                        }
-
-                        if !joueur_trouve {
+                        } else {
                             println!("Nouveau joueur {} détecté via le réseau en {}, {}", client_id, x, y);
-                            let new_player = commands.spawn((
+
+                            let new_entity = commands.spawn((
                                 ClientId(client_id),
                                 Position(nouvelle_position),
-                                CurrentShard(None),        // Il n'a pas encore de shard assigné
-                                NearbyShards(Vec::new()),  // Mémoire radar vide au départ
+                                CurrentShard(None),
+                                NearbyShards(Vec::new()),
                             )).id();
-                            player_entities.map.insert(client_id, new_player);
+
+                            player_entities.map.insert(client_id, new_entity);
                         }
                     }
                 }
@@ -234,5 +237,15 @@ pub(crate) fn flush_network_messages(
             println!("[RÉSEAU] Envoi Ordre de Boot (0x90) à l'Orchestrateur pour Shard {} ({} octets)", boot.shard_id, len);
         }
     }
+}
 
+pub fn process_boot_queue(
+    mut queue: ResMut<BootQueue>,
+    mut boot_evts: MessageWriter<BootShardMessage>,
+) {
+    // Si la file n'est pas vide, on retire le dernier élément et on l'envoie
+    if let Some((shard_id, bounds)) = queue.0.pop() {
+        println!("⏳ Dépilage : Demande de Boot pour Shard {}", shard_id);
+        boot_evts.write(BootShardMessage { shard_id, bounds });
+    }
 }

@@ -256,7 +256,7 @@ pub fn receive_messages(
                                 &target_info.stream_admin,
                                 bytes::Bytes::from(direct_msg) // On envoie le message ré-emballé
                             );
-                            println!("Message privé envoyé à {} ({} bytes)", target_name, payload_len);
+                            /*println!("Message privé envoyé à {} ({} bytes)", target_name, payload_len);*/
                         } else {
                             println!("Serveur cible '{}' introuvable pour message privé", target_name);
                         }

@@ -8,7 +8,7 @@ mod network;
 use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use std::time::Duration;
 use bevy::platform::collections::HashMap;
-use crate::components::PlayerEntities;
+use crate::components::{BootQueue, PlayerEntities};
 use crate::messages::{BootShardMessage, CrossingAlertMessage, SubscribeMessage, UnsubscribeMessage};
 use crate::quadtree::QuadTree;
 
@@ -29,6 +29,7 @@ fn main() {
 
         // Init
         .init_resource::<PlayerEntities>()
+        .init_resource::<BootQueue>()
         .add_systems(Startup, (
             network::connect_to_broker, // On lance la connexion réseau
             init_spatial_service,
@@ -39,7 +40,8 @@ fn main() {
             network::receive_position_updates,
             spatial_logic::check_shard_transitions,
             spatial_logic::monitor_shard_capacity,
-            network::flush_network_messages
+            network::flush_network_messages,
+            network::process_boot_queue,
         ).chain())
         .run();
 }
