@@ -111,6 +111,8 @@ impl QuadTree {
     /// Methode que j'utilise au runtime si un shard doit être subdivisé
     pub fn split_shard(&mut self, target_shard: u32, next_id: &mut u32) -> Option<Vec<(u32, Rect)>> {
         // Cas de base : on a trouvé la feuille à diviser
+        println!("Tentative de division du Shard {}...", target_shard);
+        
         if self.shard_id == Some(target_shard) {
             // On vérifie la limite de profondeur pour éviter un arbre infini
             if self.depth >= self.max_depth {

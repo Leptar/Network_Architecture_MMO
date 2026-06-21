@@ -38,7 +38,6 @@ impl ServerConfig {
             .parse::<usize>()
             .expect("MAX_PLAYERS doit être un nombre valide");
 
-        //
         let id = std::env::var("SERVER_ID")
             .unwrap_or((-1).to_string()).parse::<u32>()
             .expect("SERVER_ID doit être un nombre valide");

@@ -2,29 +2,31 @@
 use game_sockets::*;
 use crate::components::{ClientId, CurrentShard, NearbyShards, PlayerEntities, Position, SpatialSocket};
 use bytes::Bytes;
-use game_sockets::protocols::UdpBackend;
+use game_sockets::protocols::{QuicBackend};
 use crate::messages::*;
 use shared::{BROK_IP, BROK_PORT, PAYLOAD_BOOT_SHARD, PAYLOAD_CROSSING_ALERT, TAG_ADMIN_CONNECT, TAG_ADMIN_ROUTE_SEND};
 
 pub fn connect_to_broker(mut commands: Commands) {
 
-    let peer = GamePeer::new(UdpBackend::new());
+    let peer = GamePeer::new(QuicBackend::new());
+
 
     println!("Tentative de connexion au Broker sur {}...", BROK_IP);
     // Tenter la connexion
     match peer.connect(BROK_IP, BROK_PORT) {
         Ok(_) => {
-            println!("Service Spatial connecté avec succès au Broker !");
-            // On insère notre ressource globale dans l'ECS
-            commands.insert_resource(SpatialSocket {
-                peer,
-                broker_conn: None
-            });
+            println!("Demande de connexion envoyée au Broker. En attente de l'établissement de la connexion...");
         }
         Err(e) => {
             panic!("Échec : Impossible de se connecter au Broker. Erreur : {:?}", e);
         }
     }
+
+    // On insère notre ressource globale dans l'ECS
+    commands.insert_resource(SpatialSocket {
+        peer,
+        broker_conn: None
+    });
 }
 
 pub fn receive_position_updates(
@@ -39,6 +41,16 @@ pub fn receive_position_updates(
                 println!("Connexion établie avec le Broker ");
                 socket.broker_conn = Some(conn);
 
+                //Ouverture du stream
+                match socket.peer.create_stream(conn, GameStreamReliability::Reliable) {
+                    Ok(_) => println!("Demande de création du stream de communication avec le Broker envoyée"),
+                    Err(e) => println!("Erreur lors de la création du stream : {:?}", e),
+                }
+            }
+
+            GameNetworkEvent::StreamCreated(connection, stream) => {
+                println!("Stream créé avec le Broker (id : {}, stream id : {})", connection.connection_id, stream.stream_id);
+
                 let mut auth_packet = Vec::new();
                 auth_packet.push(TAG_ADMIN_CONNECT); // Tag 0x0A
 
@@ -49,7 +61,7 @@ pub fn receive_position_updates(
                 auth_packet.extend_from_slice(&name_bytes);
 
                 let stream = GameStream::from(0u16); // Stream fiable
-                let _ = socket.peer.send(&conn, &stream, Bytes::from(auth_packet));
+                let _ = socket.peer.send(&connection, &stream, Bytes::from(auth_packet));
 
                 println!("Carte d'identité envoyée : Je suis le 'spatial'");
             }

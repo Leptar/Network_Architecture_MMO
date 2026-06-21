@@ -1,5 +1,5 @@
 ﻿use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32 , Ordering};
 use std::time::Duration;
 use bevy::prelude::*;
 use shared::*;
@@ -13,7 +13,7 @@ use crate::resources::*;
 
 const HOT_SERVERS_MIN: usize = 4;
 
-static DGS_ID: AtomicUsize = AtomicUsize::new(0);
+static DGS_ID: AtomicU32 = AtomicU32::new(0);
 
 fn debug_msg(msg: String) {
     let header = "ORCHESTRATOR : ";
@@ -30,15 +30,18 @@ fn bind_socket() -> GameSocket{
     // Démarre 1 socket qui vas avoir plusieurs connection (0:Broker, HASH avec connection dgs)
     let peer = GamePeer::new(QuicBackend::new());
     peer.listen(ORCH_IP, ORCH_PORT).unwrap();
+    debug_msg(format!("Game socket initialized and listening on {}:{}", ORCH_IP, ORCH_PORT));
 
     //Connection to Broker
-    peer.connect(BROK_IP, BROK_PORT).unwrap();
+    match peer.connect(BROK_IP, BROK_PORT) {
+        Ok(_) => debug_msg(format!("Successfully send a connection request to Broker at {}:{}", BROK_IP, BROK_PORT)),
+        Err(e) => debug_msg(format!("Failed to connect to Broker at {}:{} - Error: {}", BROK_IP, BROK_PORT, e)),
+    }
 
     //Creation du dictionaire des connection des DGS
     let new_hashmap: std::collections::HashMap<Uuid, resources::DGSNetworkInfo> = std::collections::HashMap::new();
 
 
-    debug_msg(format!("Game socket initialized and listening on {}:{}", ORCH_IP, ORCH_PORT));
     
    return GameSocket { peer, connection_broker: None, stream_broker: None, dgs_network_info_dictionary: new_hashmap }
 }
@@ -152,10 +155,12 @@ pub fn receive_packets(
             GameNetworkEvent::Connected(connection ) => {
                 if(socket.connection_broker == None) {
                     debug_msg(format!("Connected to Broker with connection id : {}", connection.connection_id));
-                    socket.connection_broker = Some(connection);
+                    socket.connection_broker = connection.into();
 
                     //Creation du stream de communication avec le broker
                     socket.peer.create_stream(connection, GameStreamReliability::Unreliable).unwrap();
+                } else { 
+                    debug_msg(format!("New DGS connected with connection id : {}", connection.connection_id));
                 }
             }
 
@@ -174,7 +179,7 @@ pub fn receive_packets(
                         name_bytes[..name_str.len()].copy_from_slice(name_str);
                         auth_packet.extend_from_slice(&name_bytes);
 
-                        let _ = socket.peer.send(&broker_conn, &stream, bytes::Bytes::from(auth_packet));
+                        let _ = socket.peer.send(broker_conn, &stream, bytes::Bytes::from(auth_packet));
                         debug_msg("Identification envoyée au Broker : 'orchestrator'".to_string());
                     } else {
                         debug_msg(format!("WARNING : Broker connection not established yet, received message from connection id : {}, with stream id : {}", connection.connection_id, stream.stream_id));
@@ -215,6 +220,8 @@ fn start_servers() {
             &format!("BROKER_IP={}", "host.docker.internal" /*TODO: changer avec BROK_IP, mais il faut regarder ip sur réseau*/),
             "-e",
             &format!("BROKER_PORT={}", BROK_PORT),
+            "-e",
+            &format!("SERVER_ID={}", id),
             "--add-host=host.docker.internal:host-gateway",
             "dgs-image",
         ])

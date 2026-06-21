@@ -224,7 +224,12 @@ pub fn receive_messages(
 
                         // Le serveur envoie son nom. le lit et l'ajoute à la liste des services.
                         let admin_name = String::from_utf8_lossy(&rest[0..32]).trim_matches('\0').to_string();
-                        admin_registry.admins.insert(admin_name.clone(), connection);
+                        let admin_network_info: AdminNetworkInfo = AdminNetworkInfo{
+                            connection_admin: connection,
+                            stream_admin: stream.clone(),
+                        };
+
+                        admin_registry.admins.insert(admin_name.clone(), admin_network_info);
                         println!("🛡️ Serveur d'infrastructure connecté : {}", admin_name);
                     }
 
@@ -233,21 +238,23 @@ pub fn receive_messages(
                         if rest.len() < 34 { continue; }
 
                         let target_name = String::from_utf8_lossy(&rest[0..32]).trim_matches('\0').to_string();
+
+                        // Lire payload_len (2 bytes)
                         let payload_len = u16::from_le_bytes([rest[32], rest[33]]) as usize;
 
+                        // Lire le payload
                         if rest.len() < 34 + payload_len { continue; }
                         let payload = &rest[34..34 + payload_len];
 
-                        // Si la cible est bien dans notre liste
-                        if let Some(target_conn) = admin_registry.admins.get(&target_name) {
-                            let mut direct_msg = Vec::with_capacity(1 + payload_len);
-
-                            // On emballe le message avec l'étiquette de réception (0x0C)
-                            direct_msg.push(shared::TAG_ADMIN_ROUTE_RECEIVE);
-                            direct_msg.extend_from_slice(payload);
-
-                            // Et on l'envoie directement, sans passer par les abonnements des joueurs !
-                            let _ = socket.peer.send(target_conn, &stream, bytes::Bytes::from(direct_msg));
+                        if let Some(target_info) = admin_registry.admins.get(&target_name) {
+                            let _ = socket.peer.send(
+                                &target_info.connection_admin,
+                                &target_info.stream_admin,
+                                bytes::Bytes::from(payload.to_vec())
+                            );
+                            println!("Message privé envoyé à {} ({} bytes)", target_name, payload_len);
+                        } else {
+                            println!("Serveur cible '{}' introuvable pour message privé", target_name);
                         }
                     }
 

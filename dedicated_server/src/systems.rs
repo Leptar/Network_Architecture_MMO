@@ -11,6 +11,7 @@ pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
     // Démarre 1 socket qui vas avoir plusieurs connection (0: Orchestrator, 1:Broker)
     let peer = GamePeer::new(QuicBackend::new());
     peer.listen("0.0.0.0", config.port).unwrap();
+    println!("Game socket initialized and listening on port {}", config.port);
 
     //Connection to Orchestrator
     let resolved_addr_orch = format!("{}:{}", &config.orchestrator_ip, config.orchestrator_port)
@@ -35,7 +36,6 @@ pub fn bind_socket(mut commands: Commands, config: Res<ServerConfig>) {
 
 
     commands.insert_resource(GameSocket { peer, connection_orch: None, stream_orch: None, connection_broker: None, stream_broker: None });
-    println!("Game socket initialized and listening on port {}", config.port);
 }
 
 pub fn receive_packets(

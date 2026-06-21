@@ -36,10 +36,13 @@ pub struct ShardMap {
     pub shard_connections: HashMap<u32, DGSNetworkInfo>, // topic → connexion shard
 }
 
-
+pub struct AdminNetworkInfo {
+    pub connection_admin: GameConnection,
+    pub stream_admin: GameStream,
+}
 #[derive(Resource, Default)]
 pub struct AdminRegistry {
-    pub admins: HashMap<String, GameConnection>, // ex: "orchestrator" -> Connexion
+    pub admins: HashMap<String, AdminNetworkInfo>, // ex: "orchestrator" -> Connexion
 }
 
 #[derive(Resource, Default)]
