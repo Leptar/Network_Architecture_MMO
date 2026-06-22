@@ -8,6 +8,7 @@ use uuid::uuid;
 #[derive(Resource)]
 struct ClientInfo {
     client_id: u32,
+    is_registered: bool,
     pos_x: f32,
     pos_y: f32,
 }
@@ -16,8 +17,9 @@ impl Default for ClientInfo {
     fn default() -> Self {
         Self {
             client_id: 0,
-            pos_x: 2500.0,
-            pos_y: 2500.0,
+            is_registered: false,
+            pos_x: 5050.0,
+            pos_y: 5050.0,
         }
     }
 }
@@ -99,6 +101,7 @@ fn receive_packet(
                         if msg_data.len() < 4 { continue; }
                         let id = u32::from_le_bytes([msg_data[0], msg_data[1], msg_data[2], msg_data[3]]);
                         client_info.client_id = id;
+                        client_info.is_registered = true;
                         println!("Identité reçue ! Mon client_id : {}", id);
                     },
 
@@ -156,7 +159,7 @@ fn send_input(
     time: Res<Time>,
 ) {
     // Ne rien envoyer si on n'a pas encore reçu notre ID du Broker
-    if client_id.client_id == 0 {
+    if !client_id.is_registered {
         return;
     }
 
@@ -167,7 +170,7 @@ fn send_input(
 
     add_input_in_buffer(&mut input_buffer.0, INPUT_RIGHT);
 
-    let mut input_packet: ClientInput = ClientInput {
+    let input_packet: ClientInput = ClientInput {
         client_id: client_id.client_id,
         sequence_id: INPUT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst) as u32,
         input: input_buffer.0,

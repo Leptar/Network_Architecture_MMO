@@ -20,6 +20,7 @@ pub struct PlayerEntity {
     pub position: Vec2,
     pub rotation: f32,
     pub velocity: Vec2,
+    pub involved_shards: Vec<u32>,
 }
 
 impl PlayerEntity {

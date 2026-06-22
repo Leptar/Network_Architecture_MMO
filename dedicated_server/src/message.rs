@@ -14,6 +14,7 @@ pub trait  InterShardMessage {
 
 pub struct HandoffRequest{
     pub entity_id: u32,
+    pub source_shard: u32,
     pub pos: Vec2,
     pub vel: Vec2,
     pub state: [u8; 64],
@@ -22,37 +23,41 @@ pub struct HandoffRequest{
 impl InterShardMessage for HandoffRequest {
     fn resolve(&mut self, registry: &mut PlayerRegistry, server_config: &mut ServerConfig, socket: &GameSocket, connection: GameConnection, stream: GameStream) {
         println!("Resolving Handoff Request for {}", self.entity_id);
+        let margin = 10.0; // LA FAMEUSE MARGE
 
-        if server_config.status == ServerStatus::Available {
-            let new_ghost_player = PlayerEntity{
-                id: self.entity_id,
-                authority: EntityAuthority::Ghost,
-                position: self.pos,
-                rotation: 0.0,
-                velocity: self.vel,
-            };
+        // Vérification géographique
+        if self.pos.x >= (server_config.min_x - margin) && self.pos.x <= (server_config.max_x + margin) &&
+            self.pos.y >= (server_config.min_y - margin) && self.pos.y <= (server_config.max_y + margin) {
+            if server_config.status == ServerStatus::Available {
+                let new_ghost_player = PlayerEntity {
+                    id: self.entity_id,
+                    authority: EntityAuthority::Ghost,
+                    position: self.pos,
+                    rotation: 0.0,
+                    velocity: self.vel,
+                    involved_shards: Vec::new(),
+                };
 
-            registry.players.insert(self.entity_id, new_ghost_player);
+                registry.players.insert(self.entity_id, new_ghost_player);
 
-            server_config.verify_status(registry.players.len());
+                server_config.verify_status(registry.players.len());
 
-            //send Handoff accepte
-            let accept_msg = HandoffAccept {
-                entity_id: self.entity_id,
-            };
+                //send Handoff accepte
+                let accept_msg = HandoffAccept {
+                    entity_id: self.entity_id,
+                };
 
-            if let Some(player) = registry.players.get(&self.entity_id) {
-                println!("Handoff request accepted for entity {}, player entity created with Ghost authority. Sending HandoffAccept message.", self.entity_id);
-                send_inter_shards_packet(&socket, Box::new(accept_msg));
+                if let Some(player) = registry.players.get(&self.entity_id) {
+                    println!("Handoff request accepted for entity {}, player entity created with Ghost authority. Sending HandoffAccept message.", self.entity_id);
+                    send_inter_shards_packet(&socket, Box::new(accept_msg));
+                }
             }
-
         } else {
             //send Handoff reject
             let reject_msg = HandoffReject {
                 entity_id: self.entity_id,
                 reason: "Server is full".to_string(),
             };
-
             send_inter_shards_packet(&socket, Box::new(reject_msg));
         }
     }
@@ -60,6 +65,7 @@ impl InterShardMessage for HandoffRequest {
     fn to_binary(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(&self.entity_id.to_le_bytes());
+        buf.extend_from_slice(&self.source_shard.to_le_bytes());
         buf.extend_from_slice(&self.pos.x.to_le_bytes());
         buf.extend_from_slice(&self.pos.y.to_le_bytes());
         buf.extend_from_slice(&self.vel.x.to_le_bytes());
@@ -79,6 +85,7 @@ impl HandoffRequest {
     pub fn from_json(json: serde_json::Value) -> Self {
         HandoffRequest {
             entity_id: json["entity_id"].as_u64().unwrap() as u32,
+            source_shard: json["source_shard"].as_u64().unwrap_or(0) as u32,
             pos: Vec2::new(json["pos"]["x"].as_f64().unwrap() as f32, json["pos"]["y"].as_f64().unwrap() as f32),
             vel: Vec2::new(json["vel"]["x"].as_f64().unwrap() as f32, json["vel"]["y"].as_f64().unwrap() as f32),
             state: json["state"].as_str().unwrap().as_bytes()[..64].try_into().unwrap(),
@@ -89,6 +96,7 @@ impl HandoffRequest {
         //format entity_id: u32, pos: Vec2, vel: Vec2, state: [u8; 64]
         HandoffRequest {
             entity_id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            source_shard: u32::from_le_bytes(data[4..8].try_into().unwrap()),
             pos: Vec2::new(
                 f32::from_le_bytes(data[4..8].try_into().unwrap()),
                 f32::from_le_bytes(data[8..12].try_into().unwrap())

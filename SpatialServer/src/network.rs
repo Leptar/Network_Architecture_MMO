@@ -83,7 +83,7 @@ pub fn receive_position_updates(
 
                 let msg_tag = data[0];
                 let msg_data = &data[1..];
-                if msg_tag ==   TAG_ADMIN_ROUTE_RECEIVE {
+                if msg_tag == TAG_ADMIN_ROUTE_RECEIVE {
                     if msg_data.is_empty() { continue; }
 
                     let internal_tag = msg_data[0];
@@ -95,6 +95,7 @@ pub fn receive_position_updates(
                         let client_id = u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]]);
                         let x = f32::from_le_bytes([rest[4], rest[5], rest[6], rest[7]]);
                         let y = f32::from_le_bytes([rest[8], rest[9], rest[10], rest[11]]);
+                        //println!("Position reçue : ({}, {})", x, y);
                         let nouvelle_position = Vec2::new(x, y);
 
                         if let Some(&entity) = player_entities.map.get(&client_id) {

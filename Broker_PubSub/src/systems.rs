@@ -134,8 +134,7 @@ pub fn receive_messages(
                             ) {
                                 let mut msg = Vec::new();
                                 msg.push(0x05);
-                                msg.extend_from_slice(&client_id.to_le_bytes());
-                                msg.extend_from_slice(input);
+                                msg.extend_from_slice(&rest[..24]);
 
                                 let _ = socket.peer.send(
                                     shard_conn,

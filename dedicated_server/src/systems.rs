@@ -138,6 +138,7 @@ pub fn receive_packets(
                                             position: Vec2::new(client_init.pos_x, client_init.pos_y),
                                             rotation: 0.0,
                                             velocity: Vec2::ZERO,
+                                            involved_shards: Vec::new(),
                                         };
 
                                         player_registry.register_player(new_player);
@@ -184,6 +185,7 @@ pub fn receive_packets(
                                             position: Vec2::new(init_x, init_y),
                                             rotation: 0.0,
                                             velocity: Vec2::ZERO,
+                                            involved_shards: Vec::new(),
                                         };
 
                                         player_registry.register_player(new_player_entity);
@@ -233,6 +235,8 @@ pub fn receive_packets(
                                             println!("Identité mise à jour sur le Broker : {}", name_str);
                                         }
 
+                                        std::thread::sleep(std::time::Duration::from_millis(50));
+
                                         let mut bounds_packet = Vec::new();
                                         bounds_packet.push(0x00); // Tag 0x00 for server info update
                                         bounds_packet.extend_from_slice(&shard_id.to_le_bytes());
@@ -251,18 +255,18 @@ pub fn receive_packets(
                                         println!("Alerte de Frontière (CrossingAlert) reçue via le tunnel");
 
                                         // Note: la methode from byte est dans lib
-                                        if let Some(alert_data) = CrossingAlertData::from_bytes(payload) {
+                                        if let Some(alert_data) = CrossingAlertData::from_bytes(msg_data) {
                                             println!(
                                                 "Le joueur {} s'approche des bordures. Shards impliqués : {:?}",
                                                 alert_data.client_id,
                                                 alert_data.involved_shards
                                             );
 
-                                            // TODO logique de Handoff/Ghost :
                                             if let Some(player) = player_registry.players.get_mut(&alert_data.client_id) {
                                                 if matches!(player.authority, EntityAuthority::Owned) {
                                                     //active l'émission des GhostUpdates
                                                     player.authority = EntityAuthority::PendingHandoff;
+                                                    player.involved_shards = alert_data.involved_shards.clone();
                                                     println!("Joueur {} proche de la frontière : passage en PendingHandoff", alert_data.client_id);
                                                 }
                                             } else {
@@ -273,6 +277,7 @@ pub fn receive_packets(
                                                     position: Vec2::ZERO, // Sera corrigé instantanément par le premier GhostUpdate (normalement)
                                                     rotation: 0.0,
                                                     velocity: Vec2::ZERO,
+                                                    involved_shards: Vec::new(),
                                                 };
                                                 player_registry.register_player(ghost);
                                                 println!("Fantôme préparé pour le joueur {} venant d'une autre zone", alert_data.client_id);
@@ -461,10 +466,11 @@ pub fn process_handoffs(
     config: Res<ServerConfig>,
 ) {
     let mut handoff_triggered = Vec::new();
+    let my_shard_id = config.zone.parse::<u32>().unwrap_or(0);
 
     for player in registry.players.values() {
         if matches!(player.authority, EntityAuthority::PendingHandoff) {
-            // Est-il physiquement sorti de la zone de simu
+            // Est-il physiquement sorti de la zone de simu ?
             if player.position.x < config.min_x || player.position.x > config.max_x ||
                 player.position.y < config.min_y || player.position.y > config.max_y {
                 handoff_triggered.push(player.clone());
@@ -473,18 +479,20 @@ pub fn process_handoffs(
     }
 
     for player in handoff_triggered {
-        println!("Joueur {} hors frontières. Envoi du HandoffRequest.", player.id);
+        println!("Joueur {} hors frontières. Envoi du HandoffRequest à l'Orchestrateur.", player.id);
 
         let req = HandoffRequest {
             entity_id: player.id,
+            source_shard: my_shard_id,
             pos: player.position,
             vel: player.velocity,
-            state: [0; 64], // Stub
+            state: [0; 64],
         };
 
+        // On utilise ta fonction native qui pointe vers socket.connection_orch
         send_inter_shards_packet(&socket, Box::new(req));
 
-        // change pour Ghost localement pour ne pas envoyer la requête 60 fois par seconde
+        // Passage en Ghost local
         if let Some(p) = registry.players.get_mut(&player.id) {
             p.authority = EntityAuthority::Ghost;
         }
