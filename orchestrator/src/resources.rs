@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct DGSNetworkInfo{
+    pub dgs_id: u32,
     pub connection_dgs: Option<GameConnection>,
     pub stream_dgs: Option<GameStream>,
 }

@@ -65,7 +65,7 @@ pub fn receive_packets(
                             HandoffReject::TAG => Box::new(HandoffReject::from_binary(msg_data)),
                             GhostUpdate::TAG => Box::new(GhostUpdate::from_binary(msg_data)),
                             HandoffComplete::TAG => Box::new(HandoffComplete::from_binary(msg_data)),
-                            0x55 => { //format min_x min_y max_x max_y en float32
+                            0x91 => { //format min_x min_y max_x max_y en float32
                                 println!("Receive my working zone");
 
                                 if msg_data.len() != 20 {
@@ -405,18 +405,15 @@ pub fn send_ghost_update(
 ) {
     for player in registry.players.values() {
         if let EntityAuthority::PendingHandoff = &player.authority {
+            let target_shard_id = player.involved_shards.first().copied().unwrap_or(u32::MAX);
+
             let ghost_update = GhostUpdate {
                 entity_id: player.id,
                 pos: player.position,
                 vel: player.velocity,
             };
 
-            let msg = Box::new(ghost_update);
-
-            send_inter_shards_packet(
-                &socket,
-                msg,
-            );
+            send_inter_shards_packet(&socket, Box::new(ghost_update), target_shard_id);
         }
     }
 }
@@ -470,7 +467,6 @@ pub fn process_handoffs(
 
     for player in registry.players.values() {
         if matches!(player.authority, EntityAuthority::PendingHandoff) {
-            // Est-il physiquement sorti de la zone de simu ?
             if player.position.x < config.min_x || player.position.x > config.max_x ||
                 player.position.y < config.min_y || player.position.y > config.max_y {
                 handoff_triggered.push(player.clone());
@@ -481,6 +477,9 @@ pub fn process_handoffs(
     for player in handoff_triggered {
         println!("Joueur {} hors frontières. Envoi du HandoffRequest à l'Orchestrateur.", player.id);
 
+        // Prend le premier shard impliqué comme target
+        let target_shard_id = player.involved_shards.first().copied().unwrap_or(u32::MAX);
+
         let req = HandoffRequest {
             entity_id: player.id,
             source_shard: my_shard_id,
@@ -489,10 +488,8 @@ pub fn process_handoffs(
             state: [0; 64],
         };
 
-        // On utilise ta fonction native qui pointe vers socket.connection_orch
-        send_inter_shards_packet(&socket, Box::new(req));
+        send_inter_shards_packet(&socket, Box::new(req), target_shard_id);
 
-        // Passage en Ghost local
         if let Some(p) = registry.players.get_mut(&player.id) {
             p.authority = EntityAuthority::Ghost;
         }
