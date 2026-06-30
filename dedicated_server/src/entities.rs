@@ -2,36 +2,44 @@
 use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 
-#[derive(Debug)]
-pub struct OtherShardConnectionInfo{
-    pub peer : GamePeer,
-    pub connection: GameConnection,
-    pub stream: GameStream,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EntityAuthority {
     Owned,
-    PendingHandoff { target_shard: OtherShardConnectionInfo },
-    Ghost { source_shard: OtherShardConnectionInfo },
+    PendingHandoff,
+    Ghost,
 }
 
 /*************************************/
 /*           PLAYER ENTITY           */
 /*************************************/
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PlayerEntity {
     pub id      : u32,
     pub authority: EntityAuthority,
     pub position: Vec2,
     pub rotation: f32,
     pub velocity: Vec2,
+    pub involved_shards: Vec<u32>,
 }
 
 impl PlayerEntity {
     pub fn interpret_player_input(&mut self, input: [u8; 16]) {
-        //TODO : TRAITEMENT DES INPUT
+        //prend le premier input de la liste et l'applique au pos du joueur
+            let direction = input[0];
+            let speed = 5.0; // Vitesse de déplacement du joueur
+
+            match direction {
+                0 => self.position.y += speed, // Haut
+                1 => self.position.y -= speed, // Bas
+                2 => self.position.x -= speed, // Gauche
+                3 => self.position.x += speed, // Droite
+                _ => (), // Aucun mouvement
+            }
+        
+        //clamp la pos entre pour être dans le positif
+        self.position.x = self.position.x.clamp(0.0, f32::MAX);
+        self.position.y = self.position.y.clamp(0.0, f32::MAX);
     }
 }
 
@@ -45,5 +53,16 @@ impl Default for PlayerRegistry {
         PlayerRegistry {
             players: HashMap::new(),
         }
+    }
+}
+
+impl PlayerRegistry {
+    pub fn update_player_input(&mut self, client_id: u32, input: [u8; 16]) {
+        if let Some(player) = self.players.get_mut(&client_id) {
+            player.interpret_player_input(input);
+        }
+    }
+    pub fn register_player(&mut self, player: PlayerEntity) {
+        self.players.insert(player.id, player);
     }
 }

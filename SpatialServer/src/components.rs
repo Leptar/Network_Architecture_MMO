@@ -18,8 +18,11 @@ pub struct CurrentShard(pub Option<u32>);
 #[derive(Component)]
 pub struct NearbyShards(pub Vec<u32>);
 
+#[derive(Resource, Default)]
+pub struct BootQueue(pub Vec<(u32, Rect)>);
 #[derive(Resource)]
 pub struct SpatialSocket {
     pub peer: GamePeer,
     pub broker_conn: Option<GameConnection>,
+    pub has_booted: bool,
 }

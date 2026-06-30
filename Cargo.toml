@@ -5,7 +5,7 @@ members = [
     "dedicated_server",
     "orchestrator",
     "gatekeeper",
-    "broker_pubsub",
+    "Broker_PubSub",
     "shared",
     "client",
     "SpatialServer"]
@@ -21,7 +21,7 @@ rocket = {version = "0.5.1", features = ["json"]}
 redis = {version = "1.2.1", features = ["tokio-comp"]}
 
 bevy = {version = "0.19.0-rc.1", default-features = false}
-game_sockets = {git = "https://github.com/VALERE91/game_sockets"}
+game_sockets = { git = "https://github.com/VALERE91/game_sockets", default-features = false, features = ["quic", "tcp", "udp"] }
 uuid = {version = "1.23.1", features = ["v4", "serde"]}
 
 serde = { version = "1.0.228", features = ["derive"]}
@@ -36,5 +36,4 @@ bytes = "1.11.1"
 rand = "0.8.6"
 
 shared = {path = "./shared"}
-bytes = "1"
 

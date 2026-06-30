@@ -1,5 +1,5 @@
 [package]
-name = "broker_pubsub"
+name = "Broker_PubSub"
 version.workspace = true
 edition.workspace = true
 
@@ -7,3 +7,6 @@ edition.workspace = true
 bevy.workspace = true
 game_sockets.workspace = true
 bytes.workspace = true
+shared.workspace = true
+uuid.workspace = true
+bincode = "1.3.0"
